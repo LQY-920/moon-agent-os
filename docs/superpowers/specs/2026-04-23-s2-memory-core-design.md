@@ -249,7 +249,7 @@ class MemoryService {
 - 统一前缀:`/api/memory`
 - 所有端点先过 `requireSession`
 - 请求体用 zod 校验,失败 → 400 `VALIDATION_FAILED`
-- 错误响应格式:`{ "code": "...", "message": "..." }`(对齐 S1.1);`VALIDATION_FAILED` 额外带 `details`
+- 错误响应格式:`{ "error": { "code": "...", "message": "..." } }`(对齐 S1.1 的 errorHandler);`VALIDATION_FAILED` 的 `error` 对象额外带 `details` 字段
 - 时间字段:ISO 8601 字符串(`2026-04-23T10:15:30.123Z`)
 - 分页:cursor-based,`nextCursor` 为 null 表示到底
 
@@ -350,7 +350,6 @@ FK CASCADE 级联删消息。
 | `UNAUTHENTICATED` | 401 | `requireSession` 抛出 |
 | `CONVERSATION_FORBIDDEN` | 403 | 对话存在但不属于当前用户 |
 | `CONVERSATION_NOT_FOUND` | 404 | 对话 id 不存在 |
-| `INVALID_MESSAGE_ROLE` | 400 | zod 之后的兜底,理论不触发 |
 
 ---
 
@@ -369,10 +368,6 @@ export class ConversationNotFoundError extends AppError {
 
 export class ConversationForbiddenError extends AppError {
   constructor() { super('CONVERSATION_FORBIDDEN', '无权访问该会话', 403); }
-}
-
-export class InvalidMessageRoleError extends AppError {
-  constructor() { super('INVALID_MESSAGE_ROLE', 'role 取值非法', 400); }
 }
 ```
 
@@ -445,7 +440,7 @@ supertest 打完整链路,**先通过 S1.1 login 拿 cookie**:
 ## 十、与 S1.1 的连接点
 
 - `users.id` 是所有记忆表的归属根
-- `requireSession` middleware 直接 import 复用,注入 `req.user.id`
+- `requireSession` middleware 直接 import 复用,注入 `res.locals.auth: { userId, sessionId }`
 - 注销 cascade delete:注销后记忆全清 —— **这是目标行为**。M3 S2.5 做完整治理时才有"导出 / 保留快照"的选项
 - 错误体系复用 `AppError` + `errorHandler`;响应格式对齐
 
