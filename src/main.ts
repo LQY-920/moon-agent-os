@@ -46,12 +46,18 @@ export async function buildApp() {
   const safeLog = (name: string) => (ev: unknown) => {
     try { logger.info({ event: ev }, `auth_event.${name}`); } catch { /* 防御 */ }
   };
-  authEvents.on('login_success', safeLog('login_success'));
-  authEvents.on('login_failure', safeLog('login_failure'));
-  authEvents.on('logout', safeLog('logout'));
-  authEvents.on('session_revoked', safeLog('session_revoked'));
-  authEvents.on('password_changed', safeLog('password_changed'));
-  authEvents.on('user_created', safeLog('user_created'));
+  const onLoginSuccess = safeLog('login_success');
+  const onLoginFailure = safeLog('login_failure');
+  const onLogout = safeLog('logout');
+  const onSessionRevoked = safeLog('session_revoked');
+  const onPasswordChanged = safeLog('password_changed');
+  const onUserCreated = safeLog('user_created');
+  authEvents.on('login_success', onLoginSuccess);
+  authEvents.on('login_failure', onLoginFailure);
+  authEvents.on('logout', onLogout);
+  authEvents.on('session_revoked', onSessionRevoked);
+  authEvents.on('password_changed', onPasswordChanged);
+  authEvents.on('user_created', onUserCreated);
 
   const app = express();
   app.set('trust proxy', 1);
@@ -84,8 +90,16 @@ export async function buildApp() {
 
   async function shutdown() {
     if (cronTask) cronTask.stop();
+    authEvents.off('login_success', onLoginSuccess);
+    authEvents.off('login_failure', onLoginFailure);
+    authEvents.off('logout', onLogout);
+    authEvents.off('session_revoked', onSessionRevoked);
+    authEvents.off('password_changed', onPasswordChanged);
+    authEvents.off('user_created', onUserCreated);
     await db.destroy();
-    pool.end();
+    await new Promise<void>((resolve, reject) =>
+      pool.end((err) => err ? reject(err) : resolve())
+    );
   }
 
   return { app, shutdown, logger, cfg };
