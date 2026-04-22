@@ -81,3 +81,52 @@ describe('MemoryService.getConversation', () => {
     await expect(service.getConversation('user1', conv.id)).rejects.toBeInstanceOf(ConversationForbiddenError);
   });
 });
+
+describe('MemoryService.listConversations', () => {
+  it('passes userId + opts through to repository', async () => {
+    const convRepo = {
+      listByUser: vi.fn(async () => ({ items: [], nextCursor: null })),
+      findById: vi.fn(), insert: vi.fn(), touchUpdatedAt: vi.fn(), deleteById: vi.fn(),
+    };
+    const service = new MemoryService(convRepo as any, {} as any, {} as any);
+    const r = await service.listConversations('user1', { limit: 20, cursor: 'abc' });
+    expect(convRepo.listByUser).toHaveBeenCalledWith('user1', { limit: 20, cursor: 'abc' });
+    expect(r.items).toEqual([]);
+  });
+});
+
+describe('MemoryService.deleteConversation', () => {
+  it('deletes when owned by user', async () => {
+    const conv = makeConv({ userId: 'user1' });
+    const convRepo = {
+      findById: vi.fn(async () => conv),
+      deleteById: vi.fn(async () => {}),
+      insert: vi.fn(), listByUser: vi.fn(), touchUpdatedAt: vi.fn(),
+    };
+    const service = new MemoryService(convRepo as any, {} as any, {} as any);
+    await service.deleteConversation('user1', conv.id);
+    expect(convRepo.deleteById).toHaveBeenCalledWith(conv.id);
+  });
+
+  it('throws ConversationForbiddenError when owned by another user', async () => {
+    const conv = makeConv({ userId: 'other' });
+    const convRepo = {
+      findById: vi.fn(async () => conv),
+      deleteById: vi.fn(),
+      insert: vi.fn(), listByUser: vi.fn(), touchUpdatedAt: vi.fn(),
+    };
+    const service = new MemoryService(convRepo as any, {} as any, {} as any);
+    await expect(service.deleteConversation('user1', conv.id)).rejects.toBeInstanceOf(ConversationForbiddenError);
+    expect(convRepo.deleteById).not.toHaveBeenCalled();
+  });
+
+  it('throws ConversationNotFoundError when id unknown', async () => {
+    const convRepo = {
+      findById: vi.fn(async () => null),
+      deleteById: vi.fn(),
+      insert: vi.fn(), listByUser: vi.fn(), touchUpdatedAt: vi.fn(),
+    };
+    const service = new MemoryService(convRepo as any, {} as any, {} as any);
+    await expect(service.deleteConversation('user1', 'missing')).rejects.toBeInstanceOf(ConversationNotFoundError);
+  });
+});

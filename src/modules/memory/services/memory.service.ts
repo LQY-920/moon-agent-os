@@ -29,5 +29,15 @@ export class MemoryService {
     return conv;
   }
 
-  // listConversations / deleteConversation / addMessage / listMessages 下一 Task 加
+  async listConversations(userId: string, opts: { limit: number; cursor?: string | null }):
+    Promise<{ items: Conversation[]; nextCursor: string | null }> {
+    return this.conversations.listByUser(userId, opts);
+  }
+
+  async deleteConversation(userId: string, id: string): Promise<void> {
+    await this.getConversation(userId, id);
+    await this.conversations.deleteById(id);
+  }
+
+  // addMessage / listMessages 下一 Task 加
 }
