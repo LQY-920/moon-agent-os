@@ -39,5 +39,33 @@ export class MemoryService {
     await this.conversations.deleteById(id);
   }
 
-  // addMessage / listMessages 下一 Task 加
+  async addMessage(
+    userId: string,
+    conversationId: string,
+    input: { role: MessageRole; content: string },
+  ): Promise<Message> {
+    await this.getConversation(userId, conversationId);
+
+    const id = ulid();
+    const now = new Date();
+
+    await this.db.transaction().execute(async (tx) => {
+      await this.messages.insert(
+        { id, conversationId, role: input.role, content: input.content, now },
+        tx,
+      );
+      await this.conversations.touchUpdatedAt(conversationId, now, tx);
+    });
+
+    return { id, conversationId, role: input.role, content: input.content, createdAt: now };
+  }
+
+  async listMessages(
+    userId: string,
+    conversationId: string,
+    opts: { limit: number; cursor?: string | null },
+  ): Promise<{ items: Message[]; nextCursor: string | null }> {
+    await this.getConversation(userId, conversationId);
+    return this.messages.listByConversation(conversationId, opts);
+  }
 }

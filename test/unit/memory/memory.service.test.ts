@@ -130,3 +130,88 @@ describe('MemoryService.deleteConversation', () => {
     await expect(service.deleteConversation('user1', 'missing')).rejects.toBeInstanceOf(ConversationNotFoundError);
   });
 });
+
+describe('MemoryService.addMessage', () => {
+  it('inserts message + touches conversation inside a transaction', async () => {
+    const conv = makeConv({ userId: 'user1' });
+    const convRepo = {
+      findById: vi.fn(async () => conv),
+      touchUpdatedAt: vi.fn(async () => {}),
+      insert: vi.fn(), listByUser: vi.fn(), deleteById: vi.fn(),
+    };
+    const msgRepo = {
+      insert: vi.fn(async () => {}),
+      listByConversation: vi.fn(),
+    };
+    // Fake a Kysely-like db with a transaction() helper
+    const executor = { __tx: true };
+    const db = {
+      transaction: () => ({ execute: async (fn: (tx: any) => any) => fn(executor) }),
+    };
+    const service = new MemoryService(convRepo as any, msgRepo as any, db as any);
+
+    const msg = await service.addMessage('user1', conv.id, { role: 'user', content: 'hi' });
+
+    expect(msgRepo.insert).toHaveBeenCalledOnce();
+    expect(convRepo.touchUpdatedAt).toHaveBeenCalledOnce();
+    // Both calls received the tx executor
+    expect(msgRepo.insert.mock.calls[0][1]).toBe(executor);
+    expect(convRepo.touchUpdatedAt.mock.calls[0][2]).toBe(executor);
+    expect(msg.conversationId).toBe(conv.id);
+    expect(msg.role).toBe('user');
+    expect(msg.content).toBe('hi');
+    expect(msg.id).toMatch(/^[0-9A-Z]{26}$/);
+  });
+
+  it('throws ConversationForbiddenError before touching db when not owner', async () => {
+    const conv = makeConv({ userId: 'other' });
+    const convRepo = {
+      findById: vi.fn(async () => conv),
+      touchUpdatedAt: vi.fn(),
+      insert: vi.fn(), listByUser: vi.fn(), deleteById: vi.fn(),
+    };
+    const msgRepo = { insert: vi.fn(), listByConversation: vi.fn() };
+    const db = { transaction: vi.fn() };
+    const service = new MemoryService(convRepo as any, msgRepo as any, db as any);
+
+    await expect(
+      service.addMessage('user1', conv.id, { role: 'user', content: 'x' }),
+    ).rejects.toBeInstanceOf(ConversationForbiddenError);
+    expect(db.transaction).not.toHaveBeenCalled();
+    expect(msgRepo.insert).not.toHaveBeenCalled();
+  });
+});
+
+describe('MemoryService.listMessages', () => {
+  it('enforces ownership then delegates to repo', async () => {
+    const conv = makeConv({ userId: 'user1' });
+    const convRepo = {
+      findById: vi.fn(async () => conv),
+      insert: vi.fn(), listByUser: vi.fn(), touchUpdatedAt: vi.fn(), deleteById: vi.fn(),
+    };
+    const msgRepo = {
+      listByConversation: vi.fn(async () => ({ items: [], nextCursor: null })),
+      insert: vi.fn(),
+    };
+    const service = new MemoryService(convRepo as any, msgRepo as any, {} as any);
+
+    const r = await service.listMessages('user1', conv.id, { limit: 50 });
+    expect(msgRepo.listByConversation).toHaveBeenCalledWith(conv.id, { limit: 50 });
+    expect(r.items).toEqual([]);
+  });
+
+  it('refuses when caller is not owner', async () => {
+    const conv = makeConv({ userId: 'other' });
+    const convRepo = {
+      findById: vi.fn(async () => conv),
+      insert: vi.fn(), listByUser: vi.fn(), touchUpdatedAt: vi.fn(), deleteById: vi.fn(),
+    };
+    const msgRepo = { listByConversation: vi.fn(), insert: vi.fn() };
+    const service = new MemoryService(convRepo as any, msgRepo as any, {} as any);
+
+    await expect(
+      service.listMessages('user1', conv.id, { limit: 50 }),
+    ).rejects.toBeInstanceOf(ConversationForbiddenError);
+    expect(msgRepo.listByConversation).not.toHaveBeenCalled();
+  });
+});
