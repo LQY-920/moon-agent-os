@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { MemoryService } from '../../../src/modules/memory/services/memory.service';
 import { ConversationNotFoundError, ConversationForbiddenError } from '../../../src/modules/memory/domain/errors';
 import type { Conversation } from '../../../src/modules/memory/domain/conversation';
-import type { Message } from '../../../src/modules/memory/domain/message';
 
 function makeConv(overrides: Partial<Conversation> = {}): Conversation {
   return {
@@ -31,7 +30,7 @@ describe('MemoryService.createConversation', () => {
     const result = await service.createConversation('user1', { title: 'hello' });
 
     expect(convRepo.insert).toHaveBeenCalledOnce();
-    const arg = convRepo.insert.mock.calls[0][0];
+    const arg = (convRepo.insert.mock.calls[0] as unknown[])[0] as { userId: string; title: string; id: string };
     expect(arg.userId).toBe('user1');
     expect(arg.title).toBe('hello');
     expect(arg.id).toMatch(/^[0-9A-Z]{26}$/);
@@ -155,8 +154,10 @@ describe('MemoryService.addMessage', () => {
     expect(msgRepo.insert).toHaveBeenCalledOnce();
     expect(convRepo.touchUpdatedAt).toHaveBeenCalledOnce();
     // Both calls received the tx executor
-    expect(msgRepo.insert.mock.calls[0][1]).toBe(executor);
-    expect(convRepo.touchUpdatedAt.mock.calls[0][2]).toBe(executor);
+    const calls0 = msgRepo.insert.mock.calls[0] as unknown[];
+    const calls1 = convRepo.touchUpdatedAt.mock.calls[0] as unknown[];
+    expect(calls0[1]).toBe(executor);
+    expect(calls1[2]).toBe(executor);
     expect(msg.conversationId).toBe(conv.id);
     expect(msg.role).toBe('user');
     expect(msg.content).toBe('hi');
