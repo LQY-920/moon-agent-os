@@ -7,8 +7,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "tsx watch src/main.ts",
-    "start": "node --enable-source-maps dist/main.js",
+    "dev": "tsx watch --env-file=.env src/main.ts",
+    "start": "node --enable-source-maps --env-file=.env dist/main.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
@@ -17,7 +17,7 @@
     "test:e2e": "vitest run test/e2e",
     "db:migrate": "tsx scripts/migrate.ts up",
     "db:rollback": "tsx scripts/migrate.ts down",
-    "user:create": "tsx src/cli/user-create.ts"
+    "user:create": "tsx --env-file=.env src/cli/user-create.ts"
   },
   "dependencies": {
     "@zxcvbn-ts/core": "^3.0.4",
