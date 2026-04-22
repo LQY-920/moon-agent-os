@@ -42,11 +42,29 @@ export type LoginAttemptRow = {
   attempted_at: Date;
 };
 
+export type ConversationRow = {
+  id: string;
+  user_id: string;
+  title: string | null;
+  created_at: Date;
+  updated_at: Date;
+};
+
+export type MessageRow = {
+  id: string;
+  conversation_id: string;
+  role: 'user' | 'ai' | 'system';
+  content: string;
+  created_at: Date;
+};
+
 export type Database = {
   users: UserRow;
   identities: IdentityRow;
   sessions: SessionRow;
   login_attempts: LoginAttemptRow;
+  conversations: ConversationRow;
+  messages: MessageRow;
 };
 
 export function createDb(databaseUrl: string): { db: Kysely<Database>; pool: Pool } {
