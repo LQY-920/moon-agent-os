@@ -31,6 +31,12 @@ export class UserRepository {
     return { ...rowToUser(row), passwordHash: row.password_hash };
   }
 
+  async findByIdWithPassword(id: string): Promise<UserWithPassword | null> {
+    const row = await this.db.selectFrom('users').selectAll().where('id', '=', id).executeTakeFirst();
+    if (!row) return null;
+    return { ...rowToUser(row), passwordHash: row.password_hash };
+  }
+
   async insert(user: {
     id: string; email: string; passwordHash: string; displayName: string; now: Date;
   }): Promise<void> {
