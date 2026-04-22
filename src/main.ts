@@ -21,6 +21,11 @@ import { AuthController } from './modules/identity/controllers/auth.controller';
 import { MeController } from './modules/identity/controllers/me.controller';
 import { buildIdentityRoutes } from './modules/identity/routes';
 import { authEvents } from './modules/identity/events';
+import { ConversationRepository } from './modules/memory/repositories/conversation.repository';
+import { MessageRepository } from './modules/memory/repositories/message.repository';
+import { MemoryService } from './modules/memory/services/memory.service';
+import { MemoryController } from './modules/memory/controllers/memory.controller';
+import { buildMemoryRoutes } from './modules/memory/routes';
 
 export async function buildApp() {
   const cfg = loadConfig();
@@ -38,6 +43,12 @@ export async function buildApp() {
     slidingUpdateMinutes: cfg.session.slidingUpdateMinutes,
   });
   const auth = new AuthService(users, identities, attempts, passwords, sessions);
+
+  // S2 memory module
+  const conversationRepo = new ConversationRepository(db);
+  const messageRepo = new MessageRepository(db);
+  const memoryService = new MemoryService(conversationRepo, messageRepo, db);
+  const memoryCtrl = new MemoryController(memoryService);
 
   const authCtrl = new AuthController(auth, cfg.session.cookieName, cfg.session.maxAgeDays, isProd);
   const meCtrl = new MeController(users, sessions, auth, cfg.session.cookieName, cfg.session.maxAgeDays, isProd);
@@ -72,6 +83,11 @@ export async function buildApp() {
     authCtrl, meCtrl,
     requireSession: requireSession(sessions, cfg.session.cookieName),
     loginRateLimiters,
+  }));
+
+  app.use('/api/memory', buildMemoryRoutes({
+    memoryCtrl,
+    requireSession: requireSession(sessions, cfg.session.cookieName),
   }));
 
   app.use(errorHandler(logger));
