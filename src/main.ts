@@ -26,7 +26,7 @@ export async function buildApp() {
   const cfg = loadConfig();
   const isProd = cfg.nodeEnv === 'production';
   const logger = createLogger(cfg.logLevel, !isProd);
-  const { db, pool } = createDb(cfg.databaseUrl);
+  const { db } = createDb(cfg.databaseUrl);
 
   const users = new UserRepository(db);
   const identities = new IdentityRepository(db);
@@ -96,10 +96,8 @@ export async function buildApp() {
     authEvents.off('session_revoked', onSessionRevoked);
     authEvents.off('password_changed', onPasswordChanged);
     authEvents.off('user_created', onUserCreated);
+    // Kysely's MysqlDialect.destroy() internally awaits pool.end(); no separate call needed.
     await db.destroy();
-    await new Promise<void>((resolve, reject) =>
-      pool.end((err) => err ? reject(err) : resolve())
-    );
   }
 
   return { app, shutdown, logger, cfg };
