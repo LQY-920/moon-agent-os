@@ -9,6 +9,7 @@ AI 智能体操作系统实践项目。日抛型软件 + 按日进化。
 ## 当前状态
 
 - M0 地基:S1.1 账户与身份 ✅(仅一个账号,走 CLI 创建)
+- M1 记忆骨架:S2.1 记忆存储 + S2.4 回忆 API ✅(对话文本存取,无内容搜索)
 
 ## 快速开始
 
@@ -32,6 +33,18 @@ pnpm user:create --email=you@example.com --name=Yourname
 # 6. 启服务
 pnpm dev
 ```
+
+## 记忆 API(M1)
+
+所有端点都需要先登录拿 Cookie。
+
+- `POST /api/memory/conversations` 创建会话
+- `GET /api/memory/conversations` 列出会话
+- `POST /api/memory/conversations/:id/messages` 追加消息
+- `GET /api/memory/conversations/:id/messages` 读取消息
+- `DELETE /api/memory/conversations/:id` 删除会话(级联消息)
+
+详见 `docs/superpowers/specs/2026-04-23-s2-memory-core-design.md` 和 `docs/qa/s2-memory-manual-checklist.md`。
 
 ## 测试
 
