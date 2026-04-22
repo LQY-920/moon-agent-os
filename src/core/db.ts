@@ -1,4 +1,4 @@
-import { Kysely, MysqlDialect } from 'kysely';
+import { Kysely, MysqlDialect, type Generated } from 'kysely';
 import { createPool, type Pool } from 'mysql2';
 
 export type UserRow = {
@@ -34,7 +34,7 @@ export type SessionRow = {
 };
 
 export type LoginAttemptRow = {
-  id: number;
+  id: Generated<number>;
   email: string | null;
   ip: string;
   success: number;
