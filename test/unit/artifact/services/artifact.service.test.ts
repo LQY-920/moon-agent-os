@@ -24,6 +24,7 @@ function makeRepoMock() {
     findById: vi.fn(),
     listByUser: vi.fn(async () => ({ items: [], nextCursor: null })),
     updateStatus: vi.fn(async () => {}),
+    updateVisibility: vi.fn(async () => {}),
   };
 }
 
@@ -38,6 +39,7 @@ function makeArtifact(overrides: Partial<Artifact> = {}): Artifact {
     origin: 'user_intent',
     parentArtifactId: null,
     createdAt: new Date('2026-04-24T10:00:00.000Z'),
+    visibility: 'private',
     ...overrides,
   };
 }
@@ -208,5 +210,57 @@ describe('ArtifactService.retire', () => {
     repo.findById.mockResolvedValueOnce(null);
     const service = new ArtifactService(repo as any, makeRegistry());
     await expect(service.retire('user1', 'missing')).rejects.toBeInstanceOf(ArtifactNotFoundError);
+  });
+});
+
+describe('ArtifactService.updateVisibility', () => {
+  it('updates visibility when authorized', async () => {
+    const repo = makeRepoMock();
+    const a = makeArtifact({ userId: 'user1', visibility: 'private' });
+    repo.findById.mockResolvedValueOnce(a);
+    repo.findById.mockResolvedValueOnce({ ...a, visibility: 'public' });
+    const service = new ArtifactService(repo as any, makeRegistry());
+    const r = await service.updateVisibility('user1', a.id, 'public');
+    expect(repo.updateVisibility).toHaveBeenCalledWith(a.id, 'public');
+    expect(r.visibility).toBe('public');
+  });
+
+  it('throws ArtifactForbiddenError when user is not owner', async () => {
+    const repo = makeRepoMock();
+    const a = makeArtifact({ userId: 'other', visibility: 'private' });
+    repo.findById.mockResolvedValueOnce(a);
+    const service = new ArtifactService(repo as any, makeRegistry());
+    await expect(
+      service.updateVisibility('user1', a.id, 'public'),
+    ).rejects.toBeInstanceOf(ArtifactForbiddenError);
+    expect(repo.updateVisibility).not.toHaveBeenCalled();
+  });
+
+  it('throws ArtifactNotFoundError when artifact does not exist', async () => {
+    const repo = makeRepoMock();
+    repo.findById.mockResolvedValueOnce(null);
+    const service = new ArtifactService(repo as any, makeRegistry());
+    await expect(
+      service.updateVisibility('user1', 'missing', 'public'),
+    ).rejects.toBeInstanceOf(ArtifactNotFoundError);
+  });
+});
+
+describe('ArtifactService.getForRuntime', () => {
+  it('returns artifact when exists', async () => {
+    const repo = makeRepoMock();
+    const a = makeArtifact({ userId: 'user1', visibility: 'public' });
+    repo.findById.mockResolvedValueOnce(a);
+    const service = new ArtifactService(repo as any, makeRegistry());
+    const r = await service.getForRuntime(a.id);
+    expect(r.id).toBe(a.id);
+    expect(r.visibility).toBe('public');
+  });
+
+  it('throws ArtifactNotFoundError when artifact does not exist', async () => {
+    const repo = makeRepoMock();
+    repo.findById.mockResolvedValueOnce(null);
+    const service = new ArtifactService(repo as any, makeRegistry());
+    await expect(service.getForRuntime('missing')).rejects.toBeInstanceOf(ArtifactNotFoundError);
   });
 });

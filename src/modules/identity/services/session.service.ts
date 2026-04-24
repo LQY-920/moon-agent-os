@@ -1,5 +1,6 @@
 import * as crypto from 'node:crypto';
 import { ulid } from 'ulid';
+import type { Request } from 'express';
 import type { SessionRepository } from '../repositories/session.repository';
 import type { Session } from '../domain/session';
 import { UnauthenticatedError } from '../domain/errors';
@@ -65,5 +66,17 @@ export class SessionService {
 
   async list(userId: string): Promise<Session[]> {
     return this.repo.listActiveByUser(userId);
+  }
+
+  async getUserId(req: Request, cookieName: string): Promise<string | null> {
+    const cookies = req.cookies as Record<string, string> | undefined;
+    const raw = (cookies?.[cookieName] as string | undefined);
+    if (!raw) return null;
+    try {
+      const session = await this.validateAndTouch(raw, new Date());
+      return session.userId;
+    } catch {
+      return null;
+    }
   }
 }
