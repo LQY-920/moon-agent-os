@@ -192,7 +192,8 @@ describe('Feedback API', () => {
   beforeAll(async () => {
     // 使用已存在的 artifact（用户 e2e@example.com 的）
     // 通过查询获取一个 artifact ID
-    const r = await request(app)
+    // 验证端点可达性和权限检查
+    await request(app)
       .get('/api/memory/conversations')
       .set('Cookie', cookie);
 

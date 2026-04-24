@@ -122,6 +122,6 @@ describe('IntentSessionService integration', () => {
     expect(triggerSpy).toHaveBeenCalledWith(userId, session.id, {
       description: '记账 app',
       form: 'web',
-    });
+    }, undefined);
   });
 });

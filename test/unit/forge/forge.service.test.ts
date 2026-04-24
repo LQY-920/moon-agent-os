@@ -53,18 +53,21 @@ describe('ForgeService', () => {
       form: 'web',
     });
 
-    expect(mockArtifact.create).toHaveBeenCalledWith('user1', {
-      kind: 'web',
-      title: 'Web App: 一个记账 app',
-      payload: expect.objectContaining({
-        entryHtml: '<html>test</html>',
-        assets: {},
-        metadata: expect.objectContaining({
-          generatedBy: 'forge-m2',
+    expect(mockArtifact.create).toHaveBeenCalledWith(
+      'user1',
+      expect.objectContaining({
+        kind: 'web',
+        title: 'Web App: 一个记账 app',
+        payload: expect.objectContaining({
+          entryHtml: '<html>test</html>',
+          assets: {},
+          metadata: expect.objectContaining({
+            generatedBy: 'forge-m2',
+          }),
         }),
+        origin: 'user_intent',
       }),
-      origin: 'user_intent',
-    });
+    );
   });
 
   it('writes completion message to memory', async () => {
