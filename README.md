@@ -1,5 +1,17 @@
 # moon-agent-os
 
+> 🛠 **Build in Public** · 单人 + AI 杠杆从零搭一个"日抛型软件"平台的完整公开过程。
+>
+> - **定位**:软件形态按需生成、用过即弃;使用中产生的知识与记忆持久留存并持续进化("软件日抛、记忆进化")
+> - **阶段**:Pre-MVP。M0/M1 已完成,下一里程碑 M2 是"意图→产物→运行→写回记忆"的第一条完整流水线
+> - **开发方式**:1 人 + Claude Code + superpowers 方法论,每个子系统独立走 brainstorm → design → plan → 实现循环
+> - **节奏**:每周五在 [moon-share](https://github.com/LQY-920/moon-share) 复盘一次架构/决策。代码、spec、决策表、访谈记录全公开可查
+> - **欢迎**:提 issue / 讨论 spec / 访谈我(聊 30 分钟换"早期试用权")—— 技术型超级个体、独立开发者尤其欢迎
+
+完整愿景与 28 个子系统拆解:[`docs/superpowers/specs/2026-04-22-moon-agent-os-vision-decomposition.md`](docs/superpowers/specs/2026-04-22-moon-agent-os-vision-decomposition.md)
+
+---
+
 ## 项目介绍
 
 AI 智能体操作系统实践项目。日抛型软件 + 按日进化。
