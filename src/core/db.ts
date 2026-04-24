@@ -68,6 +68,7 @@ export type ArtifactRow = {
   origin: 'user_intent' | 'iteration' | 'fork' | 'install';
   parent_artifact_id: string | null;
   created_at: Date;
+  visibility: 'private' | 'public';
 };
 
 export type Database = {
