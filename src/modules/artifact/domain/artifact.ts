@@ -1,6 +1,7 @@
 export type ArtifactKind = string; // 运行时按 registry 校验
 export type ArtifactStatus = 'ready' | 'retired';
 export type ArtifactOrigin = 'user_intent' | 'iteration' | 'fork' | 'install';
+export type ArtifactVisibility = 'private' | 'public';
 
 export type Artifact = {
   id: string;
@@ -12,6 +13,7 @@ export type Artifact = {
   origin: ArtifactOrigin;
   parentArtifactId: string | null;
   createdAt: Date;
+  visibility: ArtifactVisibility;
 };
 
 export const ARTIFACT_STATUSES: readonly ArtifactStatus[] = ['ready', 'retired'] as const;

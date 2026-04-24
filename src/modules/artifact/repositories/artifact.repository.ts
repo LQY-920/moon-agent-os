@@ -1,6 +1,6 @@
 import type { Kysely } from 'kysely';
 import type { Database } from '../../../core/db';
-import type { Artifact, ArtifactKind, ArtifactOrigin, ArtifactStatus } from '../domain/artifact';
+import type { Artifact, ArtifactKind, ArtifactOrigin, ArtifactStatus, ArtifactVisibility } from '../domain/artifact';
 
 type CursorPayload = { t: Date; id: string };
 
@@ -36,6 +36,7 @@ function rowToArtifact(row: {
   origin: 'user_intent' | 'iteration' | 'fork' | 'install';
   parent_artifact_id: string | null;
   created_at: Date;
+  visibility: 'private' | 'public';
 }): Artifact {
   // mysql2 returns JSON columns already parsed (object), but some edge cases
   // (e.g., older connector versions) return a string. Normalize defensively.
@@ -50,6 +51,7 @@ function rowToArtifact(row: {
     origin: row.origin,
     parentArtifactId: row.parent_artifact_id,
     createdAt: row.created_at,
+    visibility: row.visibility,
   };
 }
 
@@ -79,6 +81,7 @@ export class ArtifactRepository {
       origin: a.origin,
       parent_artifact_id: a.parentArtifactId,
       created_at: a.now,
+      visibility: 'private',
     }).execute();
   }
 
@@ -134,6 +137,13 @@ export class ArtifactRepository {
   async updateStatus(id: string, status: ArtifactStatus): Promise<void> {
     await this.db.updateTable('artifacts')
       .set({ status })
+      .where('id', '=', id)
+      .execute();
+  }
+
+  async updateVisibility(id: string, visibility: ArtifactVisibility): Promise<void> {
+    await this.db.updateTable('artifacts')
+      .set({ visibility })
       .where('id', '=', id)
       .execute();
   }

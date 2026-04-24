@@ -1,6 +1,6 @@
 import { ulid } from 'ulid';
 import type {
-  Artifact, ArtifactKind, ArtifactOrigin, ArtifactStatus,
+  Artifact, ArtifactKind, ArtifactOrigin, ArtifactStatus, ArtifactVisibility,
 } from '../domain/artifact';
 import {
   ArtifactNotFoundError,
@@ -67,10 +67,28 @@ export class ArtifactService {
       origin: input.origin,
       parentArtifactId,
       createdAt: now,
+      visibility: 'private',
     };
   }
 
-  // getById / listByUser / retire 下一 Task 加
+  async updateVisibility(
+    userId: string,
+    artifactId: string,
+    visibility: ArtifactVisibility,
+  ): Promise<Artifact> {
+    const artifact = await this.artifacts.findById(artifactId);
+    if (!artifact) throw new ArtifactNotFoundError();
+    if (artifact.userId !== userId) throw new ArtifactForbiddenError();
+
+    await this.artifacts.updateVisibility(artifactId, visibility);
+    return this.artifacts.findById(artifactId);
+  }
+
+  async getForRuntime(artifactId: string): Promise<Artifact> {
+    const artifact = await this.artifacts.findById(artifactId);
+    if (!artifact) throw new ArtifactNotFoundError();
+    return artifact;
+  }
 
   async getById(userId: string, id: string): Promise<Artifact> {
     const a = await this.artifacts.findById(id);
