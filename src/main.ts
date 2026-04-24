@@ -118,7 +118,7 @@ export async function buildApp() {
     requireSession: requireSession(sessions, cfg.session.cookieName),
   }));
 
-  registerWebRuntimeRoutes(app, artifactService, sessions);
+  registerWebRuntimeRoutes(app, artifactService, sessions, cfg.session.cookieName);
 
   app.use(errorHandler(logger));
 

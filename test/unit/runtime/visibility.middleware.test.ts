@@ -7,7 +7,7 @@ import { ArtifactNotFoundError } from '../../../src/modules/artifact/domain/erro
 
 describe('createVisibilityMiddleware', () => {
   function createMiddleware(artifactService: ArtifactService, sessionService: SessionService) {
-    return createVisibilityMiddleware(artifactService, sessionService);
+    return createVisibilityMiddleware(artifactService, sessionService, 'mao_sess');
   }
 
   let middleware: (req: Request, res: Response, next: NextFunction) => Promise<void>;

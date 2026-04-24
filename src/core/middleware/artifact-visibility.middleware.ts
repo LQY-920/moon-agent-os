@@ -16,6 +16,7 @@ declare global {
 export function createVisibilityMiddleware(
   artifactService: ArtifactService,
   sessionService: SessionService,
+  cookieName: string,
 ) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const artifactId = (req.params as Record<string, string>).artifactId;
@@ -42,7 +43,7 @@ export function createVisibilityMiddleware(
     }
 
     // 私密 artifact：必须登录且为 owner
-    const userId = await sessionService.getUserId(req);
+    const userId = await sessionService.getUserId(req, cookieName);
     if (!userId) {
       res.redirect('/login');
       return;

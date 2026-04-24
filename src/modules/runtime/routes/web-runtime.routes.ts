@@ -8,9 +8,10 @@ export function registerWebRuntimeRoutes(
   router: Router,
   artifactService: ArtifactService,
   sessionService: SessionService,
+  cookieName: string,
 ) {
   const controller = new WebRuntimeController();
-  const visibilityMiddleware = createVisibilityMiddleware(artifactService, sessionService);
+  const visibilityMiddleware = createVisibilityMiddleware(artifactService, sessionService, cookieName);
 
   // GET /app/:artifactId - SSR 页面
   router.get('/app/:artifactId', visibilityMiddleware, (req, res) => {
@@ -20,7 +21,7 @@ export function registerWebRuntimeRoutes(
   // PATCH /api/artifacts/:artifactId - 修改 visibility
   router.patch('/api/artifacts/:artifactId', async (req, res, next) => {
     try {
-      const userId = await sessionService.getUserId(req);
+      const userId = await sessionService.getUserId(req, cookieName);
       if (!userId) {
         return res.status(401).json({ error: { code: 'UNAUTHORIZED' } });
       }

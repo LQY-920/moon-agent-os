@@ -68,8 +68,7 @@ export class SessionService {
     return this.repo.listActiveByUser(userId);
   }
 
-  async getUserId(req: Request): Promise<string | null> {
-    const cookieName = 'mao_sess'; // TODO: inject via config
+  async getUserId(req: Request, cookieName: string): Promise<string | null> {
     const cookies = req.cookies as Record<string, string> | undefined;
     const raw = (cookies?.[cookieName] as string | undefined);
     if (!raw) return null;
