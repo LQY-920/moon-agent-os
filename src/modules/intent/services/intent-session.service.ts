@@ -3,7 +3,7 @@ import type { Message } from '../../memory/domain/message';
 import type { Conversation } from '../../memory/domain/conversation';
 import type { MemoryService } from '../../memory/services/memory.service';
 import type { LlmClient } from '../../llm/client';
-import type { ForgeService } from '../../forge/forge.service';
+import type { ForgeService } from '../../forge/services/forge.service';
 import { INTENT_SYSTEM_PROMPT } from '../../../config/intent-prompt';
 
 export type IntentStatus = 'clarifying' | 'triggered';

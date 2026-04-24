@@ -5,7 +5,10 @@ import { startTestDb } from '../setup';
 import { MemoryService } from '../../../src/modules/memory/services/memory.service';
 import { ConversationRepository } from '../../../src/modules/memory/repositories/conversation.repository';
 import { MessageRepository } from '../../../src/modules/memory/repositories/message.repository';
-import { ForgeService } from '../../../src/modules/forge/forge.service';
+import { ForgeService } from '../../../src/modules/forge/services/forge.service';
+import type { ArtifactService } from '../../../src/modules/artifact/services/artifact.service';
+import type { MemoryService as MemoryServiceInterface } from '../../../src/modules/memory/services/memory.service';
+import type { LlmClient as LlmClientInterface } from '../../../src/modules/llm/client';
 
 let memoryService: MemoryService;
 let cleanup: () => Promise<void>;
@@ -56,12 +59,23 @@ const executableLlm = (responseText: string, description: string): LlmClient => 
   } as LlmResponse)),
 });
 
+// Helper to create mock ForgeService
+function createMockForgeService(): ForgeService {
+  const mockLlm = { complete: vi.fn() } as unknown as LlmClientInterface;
+  const mockArtifact = { create: vi.fn().mockResolvedValue({ id: 'test-artifact', title: 'Test' }) } as unknown as ArtifactService;
+  const mockMem = { addMessage: vi.fn().mockResolvedValue({}) } as unknown as MemoryServiceInterface;
+  const forge = new ForgeService(mockLlm, mockArtifact, mockMem);
+  // Mock triggerFromIntent to avoid real LLM/artifact calls in integration tests
+  forge.triggerFromIntent = vi.fn().mockResolvedValue(undefined);
+  return forge;
+}
+
 describe('IntentSessionService integration', () => {
   it('createSession creates a conversation with intent: title', async () => {
     const service = new IntentSessionService(
       memoryService,
       clarifyingLlm('ok'),
-      new ForgeService(),
+      createMockForgeService(),
     );
     const s = await service.createSession(userId);
     expect(s.title).toContain('intent:');
@@ -70,7 +84,7 @@ describe('IntentSessionService integration', () => {
 
   it('sendMessage writes user+AI messages to memory and returns clarifying response', async () => {
     const llm = clarifyingLlm('请问具体是什么功能?');
-    const service = new IntentSessionService(memoryService, llm, new ForgeService());
+    const service = new IntentSessionService(memoryService, llm, createMockForgeService());
     const session = await service.createSession(userId);
 
     const result = await service.sendMessage(userId, session.id, '我想做个记账 app');
@@ -87,7 +101,7 @@ describe('IntentSessionService integration', () => {
   });
 
   it('sendMessage with executable intent calls forge and returns triggered', async () => {
-    const forge = new ForgeService();
+    const forge = createMockForgeService();
     const triggerSpy = vi.spyOn(forge, 'triggerFromIntent');
     const llm = executableLlm('好的,开始生成。', '记账 app');
     const service = new IntentSessionService(memoryService, llm, forge);
