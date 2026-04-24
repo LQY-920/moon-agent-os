@@ -118,3 +118,95 @@ describe('ArtifactService.create', () => {
     expect(r.parentArtifactId).toBe(parent.id);
   });
 });
+
+describe('ArtifactService.getById', () => {
+  it('returns when owned by user', async () => {
+    const repo = makeRepoMock();
+    const a = makeArtifact({ userId: 'user1' });
+    repo.findById.mockResolvedValueOnce(a);
+    const service = new ArtifactService(repo as any, makeRegistry());
+    const r = await service.getById('user1', a.id);
+    expect(r.id).toBe(a.id);
+  });
+
+  it('throws ArtifactNotFoundError when id unknown', async () => {
+    const repo = makeRepoMock();
+    repo.findById.mockResolvedValueOnce(null);
+    const service = new ArtifactService(repo as any, makeRegistry());
+    await expect(service.getById('user1', 'missing')).rejects.toBeInstanceOf(ArtifactNotFoundError);
+  });
+
+  it('throws ArtifactForbiddenError when owned by another user', async () => {
+    const repo = makeRepoMock();
+    const a = makeArtifact({ userId: 'other' });
+    repo.findById.mockResolvedValueOnce(a);
+    const service = new ArtifactService(repo as any, makeRegistry());
+    await expect(service.getById('user1', a.id)).rejects.toBeInstanceOf(ArtifactForbiddenError);
+  });
+});
+
+describe('ArtifactService.listByUser', () => {
+  it('defaults status to ready when not provided', async () => {
+    const repo = makeRepoMock();
+    const service = new ArtifactService(repo as any, makeRegistry());
+    await service.listByUser('user1', { limit: 20 });
+    expect(repo.listByUser).toHaveBeenCalledWith('user1', {
+      limit: 20,
+      cursor: undefined,
+      kind: undefined,
+      status: 'ready',
+    });
+  });
+
+  it('passes explicit status through (allow querying retired)', async () => {
+    const repo = makeRepoMock();
+    const service = new ArtifactService(repo as any, makeRegistry());
+    await service.listByUser('user1', { limit: 20, status: 'retired' });
+    expect(repo.listByUser.mock.calls[0][1].status).toBe('retired');
+  });
+
+  it('passes kind + cursor through', async () => {
+    const repo = makeRepoMock();
+    const service = new ArtifactService(repo as any, makeRegistry());
+    await service.listByUser('user1', { limit: 10, kind: 'web', cursor: 'abc' });
+    expect(repo.listByUser.mock.calls[0][1]).toMatchObject({
+      limit: 10, kind: 'web', cursor: 'abc', status: 'ready',
+    });
+  });
+});
+
+describe('ArtifactService.retire', () => {
+  it('retires when owned and currently ready', async () => {
+    const repo = makeRepoMock();
+    const a = makeArtifact({ userId: 'user1', status: 'ready' });
+    repo.findById.mockResolvedValueOnce(a);
+    const service = new ArtifactService(repo as any, makeRegistry());
+    await service.retire('user1', a.id);
+    expect(repo.updateStatus).toHaveBeenCalledWith(a.id, 'retired');
+  });
+
+  it('is idempotent when already retired (does NOT call updateStatus)', async () => {
+    const repo = makeRepoMock();
+    const a = makeArtifact({ userId: 'user1', status: 'retired' });
+    repo.findById.mockResolvedValueOnce(a);
+    const service = new ArtifactService(repo as any, makeRegistry());
+    await service.retire('user1', a.id);
+    expect(repo.updateStatus).not.toHaveBeenCalled();
+  });
+
+  it('throws ArtifactForbiddenError when owned by another user', async () => {
+    const repo = makeRepoMock();
+    const a = makeArtifact({ userId: 'other', status: 'ready' });
+    repo.findById.mockResolvedValueOnce(a);
+    const service = new ArtifactService(repo as any, makeRegistry());
+    await expect(service.retire('user1', a.id)).rejects.toBeInstanceOf(ArtifactForbiddenError);
+    expect(repo.updateStatus).not.toHaveBeenCalled();
+  });
+
+  it('throws ArtifactNotFoundError when id unknown', async () => {
+    const repo = makeRepoMock();
+    repo.findById.mockResolvedValueOnce(null);
+    const service = new ArtifactService(repo as any, makeRegistry());
+    await expect(service.retire('user1', 'missing')).rejects.toBeInstanceOf(ArtifactNotFoundError);
+  });
+});

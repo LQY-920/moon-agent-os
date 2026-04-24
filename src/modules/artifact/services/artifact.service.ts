@@ -71,4 +71,27 @@ export class ArtifactService {
   }
 
   // getById / listByUser / retire 下一 Task 加
+
+  async getById(userId: string, id: string): Promise<Artifact> {
+    const a = await this.artifacts.findById(id);
+    if (!a) throw new ArtifactNotFoundError();
+    if (a.userId !== userId) throw new ArtifactForbiddenError();
+    return a;
+  }
+
+  async listByUser(userId: string, opts: ListArtifactsOptions): Promise<{ items: Artifact[]; nextCursor: string | null }> {
+    // status 默认只查 ready(见 spec § 6)
+    return this.artifacts.listByUser(userId, {
+      limit: opts.limit,
+      cursor: opts.cursor,
+      kind: opts.kind,
+      status: opts.status ?? 'ready',
+    });
+  }
+
+  async retire(userId: string, id: string): Promise<void> {
+    const a = await this.getById(userId, id);           // 复用归属校验
+    if (a.status === 'retired') return;                  // 幂等
+    await this.artifacts.updateStatus(id, 'retired');
+  }
 }
