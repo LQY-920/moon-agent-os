@@ -26,6 +26,10 @@ import { MessageRepository } from './modules/memory/repositories/message.reposit
 import { MemoryService } from './modules/memory/services/memory.service';
 import { MemoryController } from './modules/memory/controllers/memory.controller';
 import { buildMemoryRoutes } from './modules/memory/routes';
+import { InMemoryArtifactSchemaRegistry } from './modules/artifact/registry';
+import { WebArtifactPayload } from './modules/artifact/registry/web.schema';
+import { ArtifactRepository } from './modules/artifact/repositories/artifact.repository';
+import { ArtifactService } from './modules/artifact/services/artifact.service';
 
 export async function buildApp() {
   const cfg = loadConfig();
@@ -49,6 +53,18 @@ export async function buildApp() {
   const messageRepo = new MessageRepository(db);
   const memoryService = new MemoryService(conversationRepo, messageRepo, db);
   const memoryCtrl = new MemoryController(memoryService);
+
+  // S3.2 artifact module (no HTTP routes; exposed as in-process service for M2+ subsystems)
+  const artifactRegistry = new InMemoryArtifactSchemaRegistry();
+  artifactRegistry.register('web', WebArtifactPayload);
+
+  const artifactRepo = new ArtifactRepository(db);
+  const artifactService = new ArtifactService(artifactRepo, artifactRegistry);
+
+  // artifactService intentionally not used yet — it's the contract center
+  // that future S3.1/S3.3/S3.4/S4.1 will consume. Reference it once to avoid
+  // TS6133 "declared but never used".
+  void artifactService;
 
   const authCtrl = new AuthController(auth, cfg.session.cookieName, cfg.session.maxAgeDays, isProd);
   const meCtrl = new MeController(users, sessions, auth, cfg.session.cookieName, cfg.session.maxAgeDays, isProd);

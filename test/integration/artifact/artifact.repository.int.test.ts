@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { Kysely } from 'kysely';
-import { sql } from 'kysely';
 import { ulid } from 'ulid';
 import type { Database } from '../../../src/core/db';
 import { ArtifactRepository } from '../../../src/modules/artifact/repositories/artifact.repository';
