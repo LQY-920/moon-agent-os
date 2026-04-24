@@ -29,6 +29,8 @@ describe('core/config', () => {
     process.env.RATE_LIMIT_EMAIL_WINDOW_MIN = '10';
     process.env.RATE_LIMIT_EMAIL_MAX = '5';
     process.env.LOG_LEVEL = 'info';
+    process.env.LLM_API_KEY = 'sk-ant-placeholder';
+    process.env.LLM_MODEL = 'claude-sonnet-4-20250514';
 
     const { loadConfig } = await import('../../../src/core/config');
     const cfg = loadConfig();

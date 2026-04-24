@@ -72,7 +72,7 @@ export async function buildApp() {
   void artifactService;
 
   // S3.1 intent capture
-  const llmClient = new NativeLlmClient(cfg.llm.apiKey, cfg.llm.model, cfg.llm.baseUrl);
+  const llmClient = new NativeLlmClient(cfg.llm.apiKey, cfg.llm.model);
   const forgeService = new ForgeService();
   const intentService = new IntentSessionService(memoryService, llmClient, forgeService);
   const intentCtrl = new IntentController(intentService);

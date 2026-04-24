@@ -4,17 +4,14 @@ export class NativeLlmClient implements LlmClient {
   constructor(
     private readonly apiKey: string,
     private readonly model: string,
-    private readonly baseUrl = 'https://api.anthropic.com/v1',
   ) {}
 
   async complete(messages: LlmMessage[]): Promise<LlmResponse> {
-    const res = await fetch(`${this.baseUrl}/messages`, {
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': this.apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
+        'Authorization': `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify({
         model: this.model,
@@ -23,7 +20,7 @@ export class NativeLlmClient implements LlmClient {
       }),
     });
     if (!res.ok) throw new Error(`LLM API error: ${res.status} ${await res.text()}`);
-    const data = await res.json() as { content: Array<{ text: string }> };
-    return { content: data.content[0]?.text ?? '' };
+    const data = await res.json() as { choices: Array<{ message: { content: string | null } }> };
+    return { content: data.choices[0]?.message.content ?? '' };
   }
 }

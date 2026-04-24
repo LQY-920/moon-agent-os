@@ -16,7 +16,7 @@ describe('NativeLlmClient', () => {
   it('complete is async and returns LlmResponse', async () => {
     // Mock global fetch
     const mockFetch = vi.fn(async () => new Response(JSON.stringify({
-      content: [{ text: 'hello from llm' }],
+      choices: [{ message: { content: 'hello from llm' } }],
     })));
     vi.stubGlobal('fetch', mockFetch);
 
@@ -28,11 +28,11 @@ describe('NativeLlmClient', () => {
 
     expect(result.content).toBe('hello from llm');
     expect(mockFetch).toHaveBeenCalledOnce();
-    // Verify Anthropic headers
+    // Verify DeepSeek headers
     const calls = mockFetch.mock.calls[0] as unknown as [string, { headers: Record<string, string> }];
     const headers = calls[1].headers;
-    expect(headers['x-api-key']).toBe('test-api-key');
-    expect(headers['anthropic-version']).toBe('2023-06-01');
+    expect(headers['Authorization']).toBe('Bearer test-api-key');
+    expect(headers['Content-Type']).toBe('application/json');
 
     vi.stubGlobal('fetch', undefined);
   });

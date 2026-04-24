@@ -15,7 +15,6 @@ const ConfigSchema = z.object({
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']),
   LLM_API_KEY: z.string().min(1),
   LLM_MODEL: z.string().min(1),
-  LLM_BASE_URL: z.string().optional(),
 });
 
 export type Config = {
@@ -38,7 +37,6 @@ export type Config = {
   llm: {
     apiKey: string;
     model: string;
-    baseUrl?: string;
   };
 };
 
@@ -64,7 +62,6 @@ export function loadConfig(): Config {
     llm: {
       apiKey: parsed.LLM_API_KEY,
       model: parsed.LLM_MODEL,
-      baseUrl: parsed.LLM_BASE_URL,
     },
   };
 }
