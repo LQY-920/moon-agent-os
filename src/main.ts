@@ -31,7 +31,7 @@ import { WebArtifactPayload } from './modules/artifact/registry/web.schema';
 import { ArtifactRepository } from './modules/artifact/repositories/artifact.repository';
 import { ArtifactService } from './modules/artifact/services/artifact.service';
 import { NativeLlmClient } from './modules/llm/native';
-import { ForgeService } from './modules/forge/forge.service';
+import { ForgeService } from './modules/forge/services/forge.service';
 import { IntentSessionService } from './modules/intent/services/intent-session.service';
 import { IntentController } from './modules/intent/controllers/intent.controller';
 import { buildIntentRoutes } from './modules/intent/routes';
@@ -66,14 +66,9 @@ export async function buildApp() {
   const artifactRepo = new ArtifactRepository(db);
   const artifactService = new ArtifactService(artifactRepo, artifactRegistry);
 
-  // artifactService intentionally not used yet — it's the contract center
-  // that future S3.1/S3.3/S3.4/S4.1 will consume. Reference it once to avoid
-  // TS6133 "declared but never used".
-  void artifactService;
-
-  // S3.1 intent capture
+// S3.1 intent capture
   const llmClient = new NativeLlmClient(cfg.llm.apiKey, cfg.llm.model);
-  const forgeService = new ForgeService();
+  const forgeService = new ForgeService(llmClient, artifactService, memoryService);
   const intentService = new IntentSessionService(memoryService, llmClient, forgeService);
   const intentCtrl = new IntentController(intentService);
 
