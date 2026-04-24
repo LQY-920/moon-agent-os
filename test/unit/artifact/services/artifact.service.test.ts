@@ -53,7 +53,7 @@ describe('ArtifactService.create', () => {
       origin: 'user_intent',
     });
     expect(repo.insert).toHaveBeenCalledOnce();
-    const arg = repo.insert.mock.calls[0][0];
+    const arg = (repo.insert.mock.calls[0] as unknown[])[0] as { userId: string; title: string; status: string; origin: string; parentArtifactId: string | null; id: string };
     expect(arg.userId).toBe('user1');
     expect(arg.title).toBe('my artifact');
     expect(arg.status).toBe('ready');
@@ -162,14 +162,14 @@ describe('ArtifactService.listByUser', () => {
     const repo = makeRepoMock();
     const service = new ArtifactService(repo as any, makeRegistry());
     await service.listByUser('user1', { limit: 20, status: 'retired' });
-    expect(repo.listByUser.mock.calls[0][1].status).toBe('retired');
+    expect(((repo.listByUser.mock.calls[0] as unknown[])[1] as { status: string }).status).toBe('retired');
   });
 
   it('passes kind + cursor through', async () => {
     const repo = makeRepoMock();
     const service = new ArtifactService(repo as any, makeRegistry());
     await service.listByUser('user1', { limit: 10, kind: 'web', cursor: 'abc' });
-    expect(repo.listByUser.mock.calls[0][1]).toMatchObject({
+    expect((repo.listByUser.mock.calls[0] as unknown[])[1] as { limit: number; kind: string; cursor: string; status: string }).toMatchObject({
       limit: 10, kind: 'web', cursor: 'abc', status: 'ready',
     });
   });
