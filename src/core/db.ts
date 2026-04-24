@@ -58,6 +58,18 @@ export type MessageRow = {
   created_at: Date;
 };
 
+export type ArtifactRow = {
+  id: string;
+  user_id: string;
+  kind: string;
+  title: string;
+  payload: unknown;                                              // mysql2 自动 parse JSON
+  status: 'ready' | 'retired';
+  origin: 'user_intent' | 'iteration' | 'fork' | 'install';
+  parent_artifact_id: string | null;
+  created_at: Date;
+};
+
 export type Database = {
   users: UserRow;
   identities: IdentityRow;
@@ -65,6 +77,7 @@ export type Database = {
   login_attempts: LoginAttemptRow;
   conversations: ConversationRow;
   messages: MessageRow;
+  artifacts: ArtifactRow;
 };
 
 export function createDb(databaseUrl: string): { db: Kysely<Database>; pool: Pool } {
