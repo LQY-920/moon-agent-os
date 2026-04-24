@@ -13,6 +13,8 @@ const ConfigSchema = z.object({
   RATE_LIMIT_EMAIL_WINDOW_MIN: z.coerce.number().int().positive(),
   RATE_LIMIT_EMAIL_MAX: z.coerce.number().int().positive(),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']),
+  LLM_API_KEY: z.string().min(1),
+  LLM_MODEL: z.string().min(1),
 });
 
 export type Config = {
@@ -32,6 +34,10 @@ export type Config = {
     emailMax: number;
   };
   logLevel: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+  llm: {
+    apiKey: string;
+    model: string;
+  };
 };
 
 export function loadConfig(): Config {
@@ -53,5 +59,9 @@ export function loadConfig(): Config {
       emailMax: parsed.RATE_LIMIT_EMAIL_MAX,
     },
     logLevel: parsed.LOG_LEVEL,
+    llm: {
+      apiKey: parsed.LLM_API_KEY,
+      model: parsed.LLM_MODEL,
+    },
   };
 }
