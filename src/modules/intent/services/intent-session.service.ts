@@ -1,9 +1,12 @@
+// src/modules/intent/services/intent-session.service.ts
+
 import type { LlmMessage } from '../../llm/client';
 import type { Message } from '../../memory/domain/message';
 import type { Conversation } from '../../memory/domain/conversation';
 import type { MemoryService } from '../../memory/services/memory.service';
 import type { LlmClient } from '../../llm/client';
 import type { ForgeService } from '../../forge/services/forge.service';
+import type { FeedbackService } from '../../feedback/services/feedback.service';
 import { INTENT_SYSTEM_PROMPT } from '../../../config/intent-prompt';
 
 export type IntentStatus = 'clarifying' | 'triggered';
@@ -15,11 +18,23 @@ export type SendMessageResult = {
   intent: IntentSummary | null;
 };
 
+// 迭代关键词（Q10）：用于检测用户迭代意图
+export const ITERATE_KEYWORDS = [
+  '改进', '重新生成', '再来一次', '再试一次',
+  '改一下', '重新做一个', '重新来', '再做一个',
+  'improve', 'retry', 'regenerate', 'again',
+] as const;
+
+export function detectIterateMode(message: string): boolean {
+  return ITERATE_KEYWORDS.some(kw => message.toLowerCase().includes(kw.toLowerCase()));
+}
+
 export class IntentSessionService {
   constructor(
     private readonly memory: MemoryService,
     private readonly llm: LlmClient,
     private readonly forge: ForgeService,
+    private readonly feedbackService: FeedbackService,  // 新增第四参数
   ) {}
 
   async createSession(userId: string): Promise<Conversation> {
@@ -33,7 +48,7 @@ export class IntentSessionService {
     sessionId: string,
     userMessage: string,
   ): Promise<SendMessageResult> {
-    // 归属校验(如果不存在/不属于本人,MemoryService 会抛错)
+    // 归属校验
     await this.memory.getConversation(userId, sessionId);
 
     // 写用户消息入记忆
@@ -46,35 +61,51 @@ export class IntentSessionService {
     const historyResult = await this.memory.listMessages(userId, sessionId, { limit: 100 });
     const llmMessages = buildLlmMessages(historyResult.items, INTENT_SYSTEM_PROMPT);
 
-    // LLM 调用
+    // 调用 LLM（意图捕获阶段不注入反馈）
     const response = await this.llm.complete(llmMessages);
 
     // 解析
     const { isExecutable, responseText, intentDescription } = parseLlmOutput(response.content);
 
-    // 写 AI 回复入记忆(role=system 标记为 AI 追问)
+    // 写 AI 回复入记忆
     await this.memory.addMessage(userId, sessionId, {
       role: 'system',
       content: responseText,
     });
 
-    // 判断
     if (isExecutable) {
+      const description = intentDescription ?? userMessage;
+
+      // 迭代模式检测（Q10）：在用户原始消息上判断
+      const isIterate = detectIterateMode(userMessage);
+
+      let feedbackContext = '';
+      let parentArtifactId: string | null = null;
+      if (isIterate) {
+        // 查询历史反馈（Q7/Q8：上限 5 条）
+        const feedbacks = await this.feedbackService.matchByIntent(userId, description, 5);
+        feedbackContext = this.feedbackService.injectIntoPrompt(feedbacks);
+        // parent = matchByIntent 结果中最新的那个（Q15）
+        parentArtifactId = feedbacks[0]?.artifactId ?? null;
+      }
+
+      // 透传 ForgeIterationContext
       await this.forge.triggerFromIntent(userId, sessionId, {
-        description: intentDescription ?? userMessage,
+        description,
         form: 'web',
-      });
+      }, feedbackContext ? { feedbackContext, parentArtifactId } : undefined);
+
       return {
         message: responseText,
         status: 'triggered',
-        intent: { description: intentDescription ?? userMessage, form: 'web' },
+        intent: { description, form: 'web' },
       };
     }
     return { message: responseText, status: 'clarifying', intent: null };
   }
 }
 
-// --- helpers ---
+// --- helpers（保持不变）---
 
 export function buildLlmMessages(
   history: Message[],
@@ -84,7 +115,6 @@ export function buildLlmMessages(
   for (const m of history) {
     if (m.role === 'user') msgs.push({ role: 'user', content: m.content });
     else if (m.role === 'system') msgs.push({ role: 'assistant', content: m.content });
-    // 'ai' role 不出现在 S3.1 对话里,跳过
   }
   return msgs;
 }

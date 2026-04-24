@@ -3,7 +3,7 @@
 > 🛠 **Build in Public** · 单人 + AI 杠杆从零搭一个"日抛型软件"平台的完整公开过程。
 >
 > - **定位**:软件形态按需生成、用过即弃;使用中产生的知识与记忆持久留存并持续进化("软件日抛、记忆进化")
-> - **阶段**:M2 进行中。流水线已跑通(意图→产物→运行→写回记忆),下一里程碑 M3 是质量迭代与扩展
+> - **阶段**:M2 闭环,M3 已启动。M2 跑通"意图→产物→运行→写回记忆"流水线,M3 S3.5 打通"反馈→记忆→影响下次生成"的进化回路
 > - **开发方式**:1 人 + Claude Code + superpowers 方法论,每个子系统独立走 brainstorm → design → plan → 实现循环
 > - **节奏**:每周五在 [moon-share](https://github.com/LQY-920/moon-share) 复盘一次架构/决策。代码、spec、决策表、访谈记录全公开可查
 > - **欢迎**:提 issue / 讨论 spec / 访谈我(聊 30 分钟换"早期试用权")—— 技术型超级个体、独立开发者尤其欢迎
@@ -26,6 +26,7 @@ AI 智能体操作系统实践项目。日抛型软件 + 按日进化。
 - M2 平台契约 + 入口:S3.2 产物模型 ✅ + S3.1 意图捕获 ✅(多轮追问 + LLM 自动触发,Forge stub)
 - M2 生成流水线:S3.3 Forge 生成 ✅(LLM 直译 → artifact 存储 → 记忆写回)
 - M2 运行器:S4.1 网页运行器 ✅(SSR + iframe srcdoc + visibility 访问控制)
+- M3 迭代循环:S3.5 反馈 → 记忆 → 生成 ✅(反馈收集 + 迭代关键词触发 + origin='iteration' 血缘追溯)
 
 ## 快速开始
 
@@ -61,6 +62,15 @@ pnpm dev
 - `DELETE /api/memory/conversations/:id` 删除会话(级联消息)
 
 详见 `docs/superpowers/specs/2026-04-23-s2-memory-core-design.md` 和 `docs/qa/s2-memory-manual-checklist.md`。
+
+## 反馈 API(M3 S3.5)
+
+所有端点都需要先登录拿 Cookie。反馈用于驱动「按日进化」:用户说"改进一下"/"再试一次"时,系统会查历史反馈注入到下一次生成。
+
+- `POST /api/feedback` 提交反馈(需 owner);body: `{artifact_id, label, comment?}`,label ∈ `function_bug|ui_issue|slow_performance|missing_feature|other`
+- `GET /api/artifacts/:id/feedback` 查询某 artifact 的反馈列表(仅 owner 可查)
+
+详见 `docs/superpowers/specs/2026-04-25-s3-5-iteration-loop-design.md` 和 `docs/qa/s3-5-smoke-report-2026-04-24.md`。
 
 ## 测试
 

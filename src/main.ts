@@ -36,6 +36,9 @@ import { IntentSessionService } from './modules/intent/services/intent-session.s
 import { IntentController } from './modules/intent/controllers/intent.controller';
 import { buildIntentRoutes } from './modules/intent/routes';
 import { registerWebRuntimeRoutes } from './modules/runtime/routes/web-runtime.routes';
+import { FeedbackRepository } from './modules/feedback/repositories/feedback.repository';
+import { FeedbackService } from './modules/feedback/services/feedback.service';
+import { registerFeedbackRoutes } from './modules/feedback/routes/feedback.routes';
 
 export async function buildApp() {
   const cfg = loadConfig();
@@ -67,10 +70,14 @@ export async function buildApp() {
   const artifactRepo = new ArtifactRepository(db);
   const artifactService = new ArtifactService(artifactRepo, artifactRegistry);
 
+  // S3.5 feedback module
+  const feedbackRepo = new FeedbackRepository(db);
+  const feedbackService = new FeedbackService(feedbackRepo, artifactRepo);
+
 // S3.1 intent capture
   const llmClient = new NativeLlmClient(cfg.llm.apiKey, cfg.llm.model);
   const forgeService = new ForgeService(llmClient, artifactService, memoryService);
-  const intentService = new IntentSessionService(memoryService, llmClient, forgeService);
+  const intentService = new IntentSessionService(memoryService, llmClient, forgeService, feedbackService);
   const intentCtrl = new IntentController(intentService);
 
   const authCtrl = new AuthController(auth, cfg.session.cookieName, cfg.session.maxAgeDays, isProd);
@@ -119,6 +126,7 @@ export async function buildApp() {
   }));
 
   registerWebRuntimeRoutes(app, artifactService, sessions, cfg.session.cookieName);
+  registerFeedbackRoutes(app, feedbackService, sessions, cfg.session.cookieName);
 
   app.use(errorHandler(logger));
 

@@ -3,8 +3,14 @@
 import type { LlmClient } from '../../llm/client';
 import type { ArtifactService } from '../../artifact/services/artifact.service';
 import type { MemoryService } from '../../memory/services/memory.service';
+import type { ArtifactOrigin } from '../../artifact/domain/artifact';
 import { buildWebPrompt, parseWebResponse } from '../generators/web.generator';
 import { ForgeGenerationError } from '../domain/errors';
+
+export type ForgeIterationContext = {
+  feedbackContext: string;
+  parentArtifactId: string | null;
+};
 
 export class ForgeService {
   constructor(
@@ -17,11 +23,20 @@ export class ForgeService {
     userId: string,
     sessionId: string,
     input: { description: string; form: 'web' },
+    iteration?: ForgeIterationContext,
   ): Promise<void> {
     const { description } = input;
+    const hasFeedback = iteration && iteration.feedbackContext.length > 0;
 
     // 1. 调用 LLM 生成代码
-    const response = await this.llm.complete(buildWebPrompt(description));
+    const baseMessages = buildWebPrompt(description);
+    if (hasFeedback) {
+      baseMessages[0] = {
+        role: 'system',
+        content: iteration!.feedbackContext + baseMessages[0].content,
+      };
+    }
+    const response = await this.llm.complete(baseMessages);
 
     // 2. 解析响应
     let parsed: { entryHtml: string; assets: Record<string, string> };
@@ -40,11 +55,12 @@ export class ForgeService {
         entryHtml: parsed.entryHtml,
         assets: parsed.assets ?? {},
         metadata: {
-          generatedBy: 'forge-m2',
+          generatedBy: hasFeedback ? 'forge-m3-iteration' : 'forge-m2',
           generatedAt: new Date().toISOString(),
         },
       },
-      origin: 'user_intent',
+      origin: (hasFeedback ? 'iteration' : 'user_intent') as ArtifactOrigin,
+      parentArtifactId: hasFeedback ? iteration!.parentArtifactId : null,
     });
 
     // 4. 写回记忆

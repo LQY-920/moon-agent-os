@@ -71,11 +71,18 @@ function createMockForgeService(): ForgeService {
 }
 
 describe('IntentSessionService integration', () => {
+  // Mock feedbackService for tests
+  const mockFeedbackService = {
+    matchByIntent: vi.fn().mockResolvedValue([]),
+    injectIntoPrompt: vi.fn().mockReturnValue(''),
+  } as unknown as import('../../../src/modules/feedback/services/feedback.service').FeedbackService;
+
   it('createSession creates a conversation with intent: title', async () => {
     const service = new IntentSessionService(
       memoryService,
       clarifyingLlm('ok'),
       createMockForgeService(),
+      mockFeedbackService,
     );
     const s = await service.createSession(userId);
     expect(s.title).toContain('intent:');
@@ -84,7 +91,7 @@ describe('IntentSessionService integration', () => {
 
   it('sendMessage writes user+AI messages to memory and returns clarifying response', async () => {
     const llm = clarifyingLlm('请问具体是什么功能?');
-    const service = new IntentSessionService(memoryService, llm, createMockForgeService());
+    const service = new IntentSessionService(memoryService, llm, createMockForgeService(), mockFeedbackService);
     const session = await service.createSession(userId);
 
     const result = await service.sendMessage(userId, session.id, '我想做个记账 app');
@@ -104,7 +111,7 @@ describe('IntentSessionService integration', () => {
     const forge = createMockForgeService();
     const triggerSpy = vi.spyOn(forge, 'triggerFromIntent');
     const llm = executableLlm('好的,开始生成。', '记账 app');
-    const service = new IntentSessionService(memoryService, llm, forge);
+    const service = new IntentSessionService(memoryService, llm, forge, mockFeedbackService);
     const session = await service.createSession(userId);
 
     const result = await service.sendMessage(userId, session.id, '我要一个记账 app');
@@ -115,6 +122,6 @@ describe('IntentSessionService integration', () => {
     expect(triggerSpy).toHaveBeenCalledWith(userId, session.id, {
       description: '记账 app',
       form: 'web',
-    });
+    }, undefined);
   });
 });
