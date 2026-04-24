@@ -2,7 +2,7 @@ import type { LlmMessage } from '../../llm/client';
 import type { Message } from '../../memory/domain/message';
 import type { Conversation } from '../../memory/domain/conversation';
 import type { MemoryService } from '../../memory/services/memory.service';
-import type { LlmClient, LlmResponse } from '../../llm/client';
+import type { LlmClient } from '../../llm/client';
 import type { ForgeService } from '../../forge/forge.service';
 import { INTENT_SYSTEM_PROMPT } from '../../../config/intent-prompt';
 

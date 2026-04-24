@@ -30,6 +30,11 @@ import { InMemoryArtifactSchemaRegistry } from './modules/artifact/registry';
 import { WebArtifactPayload } from './modules/artifact/registry/web.schema';
 import { ArtifactRepository } from './modules/artifact/repositories/artifact.repository';
 import { ArtifactService } from './modules/artifact/services/artifact.service';
+import { NativeLlmClient } from './modules/llm/native';
+import { ForgeService } from './modules/forge/forge.service';
+import { IntentSessionService } from './modules/intent/services/intent-session.service';
+import { IntentController } from './modules/intent/controllers/intent.controller';
+import { buildIntentRoutes } from './modules/intent/routes';
 
 export async function buildApp() {
   const cfg = loadConfig();
@@ -65,6 +70,12 @@ export async function buildApp() {
   // that future S3.1/S3.3/S3.4/S4.1 will consume. Reference it once to avoid
   // TS6133 "declared but never used".
   void artifactService;
+
+  // S3.1 intent capture
+  const llmClient = new NativeLlmClient(cfg.llm.apiKey, cfg.llm.model);
+  const forgeService = new ForgeService();
+  const intentService = new IntentSessionService(memoryService, llmClient, forgeService);
+  const intentCtrl = new IntentController(intentService);
 
   const authCtrl = new AuthController(auth, cfg.session.cookieName, cfg.session.maxAgeDays, isProd);
   const meCtrl = new MeController(users, sessions, auth, cfg.session.cookieName, cfg.session.maxAgeDays, isProd);
@@ -103,6 +114,11 @@ export async function buildApp() {
 
   app.use('/api/memory', buildMemoryRoutes({
     memoryCtrl,
+    requireSession: requireSession(sessions, cfg.session.cookieName),
+  }));
+
+  app.use('/api/intent', buildIntentRoutes({
+    intentCtrl,
     requireSession: requireSession(sessions, cfg.session.cookieName),
   }));
 
