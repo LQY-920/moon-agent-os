@@ -76,6 +76,9 @@
 | 12 | 迭代 artifact 处理 | 新建 + `parent_artifact_id` 血缘 | artifact 不可变；历史完整可追溯；血缘清晰 |
 | 13 | 反馈权限范围 | 仅 owner，一对多 | M3「自己评价自己产物→影响自己下次生成」回路完整；跨用户反馈留 M4 |
 | 14 | prompt 注入 | 结构化块 + system prompt + 上限 5 条 | 与 S3.3 现有 prompt 架构一致；上限防止膨胀；结构化便于未来扩展 |
+| 15 | parent_artifact_id 来源 | matchByIntent 结果中最新的那个 artifact | 与 Q5/Q10 的零前端改动理念一致；自动选取最近相似产物作为血缘起点 |
+| 16 | 关键词提取 | 剥离 ITERATE_KEYWORDS 后取前 10 字符 | 去除迭代词噪音后中文前 10 字符信息密度足够；M4 引入 S2.3 再升级 |
+| 17 | artifactTitle 来源 | Service 层调 artifactRepo.findById 填充 | 主键查询性能足够；比 JOIN 更清晰；前端反馈详情页天然需要 title |
 
 ---
 
@@ -339,7 +342,20 @@ import { ulid } from 'ulid';
 import type { FeedbackRepository } from '../repositories/feedback.repository';
 import type { ArtifactRepository } from '../../artifact/repositories/artifact.repository';
 import type { HistoricalFeedback, FeedbackLabel } from '../domain/feedback';
+import { ITERATE_KEYWORDS } from '../../intent/services/intent-session.service';
 import { FeedbackNotFoundError, FeedbackForbiddenError } from '../domain/errors';
+
+/**
+ * 剥离迭代关键词（Q16）。
+ * 例："再做一个记账 app" → "记账 app"。
+ */
+function stripIterateKeywords(text: string): string {
+  let out = text;
+  for (const kw of ITERATE_KEYWORDS) {
+    out = out.replace(new RegExp(kw, 'gi'), '');
+  }
+  return out.trim();
+}
 
 export class FeedbackService {
   constructor(
@@ -363,10 +379,12 @@ export class FeedbackService {
   }
 
   async listByArtifact(artifactId: string): Promise<HistoricalFeedback[]> {
+    // 同时查 artifact title（决策 Q17：Service 层主键查询填充）
+    const artifact = await this.artifactRepo.findById(artifactId);
     const rows = await this.feedbackRepo.listByArtifact(artifactId);
     return rows.map(r => ({
       artifactId: r.artifact_id,
-      artifactTitle: '',  // 需要 artifact.title，这里简化处理
+      artifactTitle: artifact?.title ?? '',
       label: r.label as FeedbackLabel,
       comment: r.comment,
       createdAt: r.created_at,
@@ -374,8 +392,10 @@ export class FeedbackService {
   }
 
   async matchByIntent(userId: string, description: string, limit = 5): Promise<HistoricalFeedback[]> {
-    // 提取关键词：从 description 中取名词/动词（简单策略：取前10个字符）
-    const keyword = description.substring(0, 10);
+    // 决策 Q16：剥离迭代关键词后取前 10 字符
+    const stripped = stripIterateKeywords(description);
+    const keyword = stripped.substring(0, 10);
+    if (keyword.trim().length === 0) return [];
 
     const rows = await this.feedbackRepo.listByUserAndIntentKeyword(userId, keyword, limit);
     return rows.map(r => ({
@@ -385,6 +405,15 @@ export class FeedbackService {
       comment: r.comment,
       createdAt: r.created_at,
     }));
+  }
+
+  /**
+   * 查找迭代生成时的 parent_artifact_id（决策 Q15）。
+   * 返回 matchByIntent 结果中最新的 artifact id；无匹配返回 null。
+   */
+  async findParentArtifactId(userId: string, description: string): Promise<string | null> {
+    const feedbacks = await this.matchByIntent(userId, description, 1);
+    return feedbacks[0]?.artifactId ?? null;
   }
 
   injectIntoPrompt(feedbacks: HistoricalFeedback[]): string {
@@ -402,23 +431,32 @@ export class FeedbackService {
 
 ### IntentSessionService 改动（迭代模式检测）
 
+**要点**：反馈**不注入意图捕获阶段的 LLM**（clarifying 用的是 INTENT_SYSTEM_PROMPT），只在 `forge.triggerFromIntent` 阶段注入。意图捕获阶段只需要：
+1. 检测到迭代关键词 → 将 `feedbackContext + parentArtifactId` 透传给 Forge
+2. 不修改 INTENT_SYSTEM_PROMPT；不修改 LlmClient.complete 签名
+
 ```typescript
 // src/modules/intent/services/intent-session.service.ts（增量）
 
 export type IntentMode = 'capture' | 'iterate';
 
-const ITERATE_KEYWORDS = [
+export const ITERATE_KEYWORDS = [
   '改进', '重新生成', '再来一次', '再试一次',
   '改一下', '重新做一个', '重新来', '再做一个',
   'improve', 'retry', 'regenerate', 'again',
 ];
 
-function detectIterateMode(message: string): boolean {
+export function detectIterateMode(message: string): boolean {
   return ITERATE_KEYWORDS.some(kw => message.toLowerCase().includes(kw.toLowerCase()));
 }
 
 export class IntentSessionService {
-  // ... 现有方法不变 ...
+  constructor(
+    private readonly memory: MemoryService,
+    private readonly llm: LlmClient,
+    private readonly forge: ForgeService,
+    private readonly feedbackService: FeedbackService,  // 新增依赖
+  ) {}
 
   async sendMessage(
     userId: string,
@@ -432,23 +470,45 @@ export class IntentSessionService {
       content: userMessage,
     });
 
-    // 检测迭代模式
-    const mode: IntentMode = detectIterateMode(userMessage) ? 'iterate' : 'capture';
-
     const historyResult = await this.memory.listMessages(userId, sessionId, { limit: 100 });
     const llmMessages = buildLlmMessages(historyResult.items, INTENT_SYSTEM_PROMPT);
 
-    // 迭代模式：注入历史反馈
-    let feedbackContext = '';
-    if (mode === 'iterate') {
-      // 从 userMessage 提取 description（简化：取用户最新一条的 content 作为 description）
-      const feedbackService = this.feedbackService; // 需要注入
-      const feedbacks = await feedbackService.matchByIntent(userId, userMessage, 5);
-      feedbackContext = feedbackService.injectIntoPrompt(feedbacks);
-    }
+    // intent LLM 照常调用（不注入反馈，反馈只影响 Forge 生成阶段）
+    const response = await this.llm.complete(llmMessages);
+    const { isExecutable, responseText, intentDescription } = parseLlmOutput(response.content);
 
-    const response = await this.llm.complete(llmMessages, feedbackContext);
-    // ...
+    await this.memory.addMessage(userId, sessionId, {
+      role: 'system',
+      content: responseText,
+    });
+
+    if (isExecutable) {
+      const description = intentDescription ?? userMessage;
+      // 决策 Q10：检测迭代关键词（在用户原始消息上判断）
+      const isIterate = detectIterateMode(userMessage);
+
+      let feedbackContext = '';
+      let parentArtifactId: string | null = null;
+      if (isIterate) {
+        // 决策 Q7/Q8/Q14：查历史反馈（上限 5 条）
+        const feedbacks = await this.feedbackService.matchByIntent(userId, description, 5);
+        feedbackContext = this.feedbackService.injectIntoPrompt(feedbacks);
+        // 决策 Q15：parent = matchByIntent 结果中最新的那个
+        parentArtifactId = feedbacks[0]?.artifactId ?? null;
+      }
+
+      await this.forge.triggerFromIntent(userId, sessionId, {
+        description,
+        form: 'web',
+      }, { feedbackContext, parentArtifactId });
+
+      return {
+        message: responseText,
+        status: 'triggered',
+        intent: { description, form: 'web' },
+      };
+    }
+    return { message: responseText, status: 'clarifying', intent: null };
   }
 }
 ```
@@ -458,33 +518,71 @@ export class IntentSessionService {
 ```typescript
 // src/modules/forge/services/forge.service.ts（改动部分）
 
+export type ForgeIterationContext = {
+  feedbackContext: string;         // 已格式化的 [HISTORICAL_FEEDBACK]...[/HISTORICAL_FEEDBACK] 块；无反馈时为空字符串
+  parentArtifactId: string | null; // 迭代 artifact 的 parent；无匹配时为 null
+};
+
 export class ForgeService {
   async triggerFromIntent(
     userId: string,
     sessionId: string,
     input: { description: string; form: 'web' },
-    feedbackContext?: string,  // 新增可选参数
+    iteration?: ForgeIterationContext,  // 新增可选参数（非迭代调用时不传）
   ): Promise<void> {
     const { description } = input;
+    const hasFeedback = iteration && iteration.feedbackContext.length > 0;
 
-    // 构建 prompt（含反馈上下文）
+    // 1. 构建 prompt（迭代时在 system prompt 前拼反馈块）
     const baseMessages = buildWebPrompt(description);
-    if (feedbackContext) {
-      // 在 system prompt 前插入反馈块
+    if (hasFeedback) {
       baseMessages[0] = {
         role: 'system',
-        content: feedbackContext + baseMessages[0].content,
+        content: iteration!.feedbackContext + baseMessages[0].content,
       };
     }
 
+    // 2. LLM 调用（签名不变，不改 LlmClient）
     const response = await this.llm.complete(baseMessages);
-    // ... 解析 + 存 artifact ...
-    const origin = feedbackContext ? 'iteration' : 'user_intent';
-    const parentArtifactId = feedbackContext ? /* 需要传 parentArtifactId */ : null;
-    // ...
+
+    // 3. 解析响应
+    let parsed: { entryHtml: string; assets: Record<string, string> };
+    try {
+      parsed = parseWebResponse(response.content);
+    } catch {
+      throw new ForgeGenerationError('LLM 响应格式错误，无法解析为 JSON');
+    }
+
+    // 4. 存 artifact（决策 Q12：迭代 artifact origin='iteration' + parent_artifact_id）
+    const title = `Web App: ${description.substring(0, 50)}`;
+    const origin: ArtifactOrigin = hasFeedback ? 'iteration' : 'user_intent';
+    const parentArtifactId = hasFeedback ? iteration!.parentArtifactId : null;
+
+    const artifact = await this.artifact.create(userId, {
+      kind: 'web',
+      title,
+      payload: {
+        entryHtml: parsed.entryHtml,
+        assets: parsed.assets ?? {},
+        metadata: {
+          generatedBy: hasFeedback ? 'forge-m3-iteration' : 'forge-m2',
+          generatedAt: new Date().toISOString(),
+        },
+      },
+      origin,
+      parentArtifactId,
+    });
+
+    // 5. 写回记忆
+    await this.memory.addMessage(userId, sessionId, {
+      role: 'system',
+      content: `产物已生成：${artifact.title}，ID: ${artifact.id}`,
+    });
   }
 }
 ```
+
+**注意**：`ArtifactService.create()` 的 `CreateArtifactInput` 已有 `parentArtifactId?: string | null` 字段（S3.2 建的），**不需要改 ArtifactService**。
 
 ### FeedbackController（路由）
 
@@ -495,15 +593,15 @@ import type { Request, Response, NextFunction } from 'express';
 import type { FeedbackService } from '../services/feedback.service';
 import type { FeedbackLabel } from '../domain/feedback';
 import { FEEDBACK_LABELS } from '../domain/feedback';
-import { ValidationError } from '../../../core/errors';
+import type { AuthCtx } from '../../../middleware/require-session';
 
 export class FeedbackController {
   constructor(private readonly feedbackService: FeedbackService) {}
 
   async create(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = req.context?.userId;
-      if (!userId) return res.status(401).json({ error: { code: 'UNAUTHORIZED' } });
+      // 项目规范：userId 从 res.locals.auth（由 requireSession 中间件注入）读取
+      const { userId } = res.locals.auth as AuthCtx;
 
       const { artifact_id, label, comment } = req.body as {
         artifact_id: string;
@@ -528,8 +626,10 @@ export class FeedbackController {
 
   async listByArtifact(req: Request, res: Response, next: NextFunction) {
     try {
+      // 权限：仅 owner 可查（通过 feedbackService 内部校验，见 S3.5 Q13）
+      const { userId } = res.locals.auth as AuthCtx;
       const { id } = req.params;
-      const feedbacks = await this.feedbackService.listByArtifact(id);
+      const feedbacks = await this.feedbackService.listByArtifactForOwner(userId, id);
       res.json({ items: feedbacks });
     } catch (e) {
       next(e);
@@ -537,6 +637,10 @@ export class FeedbackController {
   }
 }
 ```
+
+**注意**：
+- `listByArtifactForOwner` 是 `FeedbackService` 上的新方法，内部先校验 `artifact.userId === userId`，非 owner 抛 `FeedbackForbiddenError`；spec 第四节 FeedbackService 示例中的 `listByArtifact` 在实际实现时替换为该方法（与 Q13 决策保持一致）。
+- `errorHandler` 会把 `FeedbackForbiddenError` 映射为 HTTP 403。
 
 ### FeedbackRoutes
 
@@ -547,7 +651,7 @@ import type { Router } from 'express';
 import type { FeedbackService } from '../services/feedback.service';
 import type { SessionService } from '../../identity/services/session.service';
 import { FeedbackController } from '../controllers/feedback.controller';
-import { requireSession } from '../../../core/middleware/require-session';
+import { requireSession } from '../../../middleware/require-session';
 
 export function registerFeedbackRoutes(
   router: Router,
@@ -572,21 +676,29 @@ export function registerFeedbackRoutes(
 
 ### IntentSessionService 改造要点
 
-1. **注入 FeedbackService**：constructor 增加第三个参数 `feedbackService: FeedbackService`
-2. **迭代关键词检测**：在 `sendMessage` 入口新增 `detectIterateMode(userMessage)`
-3. **反馈注入**：迭代模式下调 `feedbackService.matchByIntent(userId, userMessage, 5)`
-4. **Prompt 传递**：把 `feedbackContext` 传入 `llm.complete`（需要修改 `LlmClient.complete` 签名支持附加 context）
-5. **Forge 调用**：把 `feedbackContext` 透传给 `forge.triggerFromIntent`
+1. **注入 FeedbackService**：constructor 增加第四个参数 `feedbackService: FeedbackService`
+2. **迭代关键词检测**：在 `sendMessage` 的 `isExecutable` 分支中调用 `detectIterateMode(userMessage)`
+3. **反馈查询 + parent 选取**：迭代模式下一并调 `feedbackService.matchByIntent(userId, description, 5)`，取 `feedbacks[0].artifactId` 作为 `parentArtifactId`
+4. **Forge 调用**：把 `{ feedbackContext, parentArtifactId }` 透传给 `forge.triggerFromIntent` 第四个参数
+5. **不改 LlmClient**：反馈只影响 Forge 生成阶段的 system prompt；意图捕获阶段的 LLM 调用完全不变
 
-### LlmClient 接口扩展
+### main.ts 装配变化
 
 ```typescript
-// src/modules/llm/client.ts（增量）
+// 装配顺序变化
+const feedbackRepo = new FeedbackRepository(db);
+const feedbackService = new FeedbackService(feedbackRepo, artifactRepo);
 
-export interface LlmClient {
-  complete(messages: LlmMessage[], contextHint?: string): Promise<LlmResponse>;
-  // 新增 contextHint：可选的系统级上下文注入（如反馈块）
-}
+// forge 不变
+const forgeService = new ForgeService(llmClient, artifactService, memoryService);
+
+// intent 现在依赖 feedbackService
+const intentService = new IntentSessionService(
+  memoryService, llmClient, forgeService, feedbackService,  // 新增第四个参数
+);
+
+// 注册 feedback 路由
+registerFeedbackRoutes(expressApp, feedbackService, sessions, cfg.session.cookieName);
 ```
 
 ---
@@ -661,19 +773,20 @@ export interface LlmClient {
 ## 十、实现顺序提示（给 writing-plans）
 
 1. `20260425_005_add_feedback_table.ts` migration
-2. `feedback/domain/feedback.ts`（类型 + FEEDBACK_LABELS）
-3. `feedback/repositories/feedback.repository.ts`（CRUD + matchByIntent SQL）
-4. `feedback/services/feedback.service.ts`（create + matchByIntent + injectIntoPrompt）
-5. `feedback/controllers/feedback.controller.ts`（create + listByArtifact）
-6. `feedback/routes/feedback.routes.ts` + `main.ts` 注册
-7. `IntentSessionService` 改动（迭代检测 + 注入 FeedbackService）
-8. `ForgeService` 改动（feedbackContext 参数 + origin='iteration'）
-9. `LlmClient.complete` 签名扩展（contextHint 参数）
-10. Unit 测试（feedback service + intent iterate mode）
-11. Integration 测试（完整反馈循环）
-12. E2E 增量（迭代模式端到端）
-13. Typecheck + 全量测试绿
+2. `feedback/domain/feedback.ts`（类型 + FEEDBACK_LABELS + HistoricalFeedback）
+3. `feedback/domain/errors.ts`（FeedbackNotFoundError + FeedbackForbiddenError）
+4. `feedback/repositories/feedback.repository.ts`（CRUD + listByUserAndIntentKeyword）
+5. `feedback/services/feedback.service.ts`（create + matchByIntent + injectIntoPrompt + listByArtifactForOwner）
+6. `feedback/controllers/feedback.controller.ts`（create + listByArtifact）
+7. `feedback/routes/feedback.routes.ts`
+8. `ForgeService` 改动（ForgeIterationContext 参数 + origin='iteration' + parent_artifact_id）
+9. `IntentSessionService` 改动（ITERATE_KEYWORDS 常量导出 + detectIterateMode + 注入 FeedbackService 依赖 + 迭代分支）
+10. `main.ts` 装配更新（FeedbackRepository/Service 注入 + IntentSessionService 第四参数 + 注册 feedback 路由）
+11. Unit 测试（feedback service + intent iterate mode）
+12. Integration 测试（完整反馈循环）
+13. E2E 增量（迭代模式端到端）
+14. Typecheck + 全量测试绿
 
 ---
 
-*本设计基于 2026-04-25 brainstorming 对话生成。14 个决策见第二节。*
+*本设计基于 2026-04-25 brainstorming 对话生成。17 个决策见第二节。*
