@@ -35,6 +35,7 @@ import { ForgeService } from './modules/forge/services/forge.service';
 import { IntentSessionService } from './modules/intent/services/intent-session.service';
 import { IntentController } from './modules/intent/controllers/intent.controller';
 import { buildIntentRoutes } from './modules/intent/routes';
+import { registerWebRuntimeRoutes } from './modules/runtime/routes/web-runtime.routes';
 
 export async function buildApp() {
   const cfg = loadConfig();
@@ -116,6 +117,8 @@ export async function buildApp() {
     intentCtrl,
     requireSession: requireSession(sessions, cfg.session.cookieName),
   }));
+
+  registerWebRuntimeRoutes(app, artifactService, sessions);
 
   app.use(errorHandler(logger));
 
