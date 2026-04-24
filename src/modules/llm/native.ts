@@ -4,10 +4,11 @@ export class NativeLlmClient implements LlmClient {
   constructor(
     private readonly apiKey: string,
     private readonly model: string,
+    private readonly baseUrl = 'https://api.anthropic.com/v1',
   ) {}
 
   async complete(messages: LlmMessage[]): Promise<LlmResponse> {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(`${this.baseUrl}/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

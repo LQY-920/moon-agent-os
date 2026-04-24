@@ -47,6 +47,8 @@ beforeAll(async () => {
   process.env.RATE_LIMIT_EMAIL_WINDOW_MIN = '10';
   process.env.RATE_LIMIT_EMAIL_MAX = '1000';
   process.env.LOG_LEVEL = 'warn';
+  process.env.LLM_API_KEY = process.env.LLM_API_KEY ?? 'sk-ant-test';
+  process.env.LLM_MODEL = process.env.LLM_MODEL ?? 'claude-sonnet-4-20250514';
 
   const { buildApp } = await import('../../src/main');
   const built = await buildApp();

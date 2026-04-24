@@ -12,6 +12,7 @@ import type { Database } from '../../src/core/db';
 let container: StartedMySqlContainer;
 let app: Express;
 let shutdown: () => Promise<void>;
+let cookie: string;
 
 beforeAll(async () => {
   container = await new MySqlContainer('mysql:8').withDatabase('moon_e2e').withRootPassword('root').start();
@@ -74,6 +75,11 @@ beforeAll(async () => {
     email: 'e2e@example.com', password: 'E2e-Secret-Passcode-!!', displayName: 'E2E', via: 'cli', now: new Date(),
   });
   await db2.destroy();
+
+  // Pre-login to reuse cookie across tests
+  const login = await request(app).post('/api/auth/login').send({ email: 'e2e@example.com', password: 'E2e-Secret-Passcode-!!' });
+  expect(login.status).toBe(200);
+  cookie = login.headers['set-cookie'];
 }, 120_000);
 
 afterAll(async () => {
@@ -81,64 +87,44 @@ afterAll(async () => {
   await container.stop();
 }, 60_000);
 
-describe('auth e2e', () => {
-  it('login → /me → logout flow', async () => {
-    const login = await request(app).post('/api/auth/login').send({ email: 'e2e@example.com', password: 'E2e-Secret-Passcode-!!' });
-    expect(login.status).toBe(200);
-    const cookie = login.headers['set-cookie'];
-    expect(cookie).toBeDefined();
-
-    const me = await request(app).get('/api/me').set('Cookie', cookie);
-    expect(me.status).toBe(200);
-    expect(me.body.user.email).toBe('e2e@example.com');
-
-    const logout = await request(app).post('/api/auth/logout').set('Cookie', cookie);
-    expect(logout.status).toBe(204);
-
-    const afterLogout = await request(app).get('/api/me').set('Cookie', cookie);
-    expect(afterLogout.status).toBe(401);
+describe('Intent API', () => {
+  it('returns 401 without cookie', async () => {
+    const r = await request(app).post('/api/intent/sessions').send({});
+    expect(r.status).toBe(401);
   });
 
-  it('login with wrong password returns 401 INVALID_CREDENTIALS (not leaking email existence)', async () => {
-    const res1 = await request(app).post('/api/auth/login').send({ email: 'e2e@example.com', password: 'wrong-password' });
-    expect(res1.status).toBe(401);
-    expect(res1.body.error.code).toBe('INVALID_CREDENTIALS');
-
-    const res2 = await request(app).post('/api/auth/login').send({ email: 'nobody@example.com', password: 'wrong-password' });
-    expect(res2.status).toBe(401);
-    expect(res2.body.error.code).toBe('INVALID_CREDENTIALS');
+  it('creates session and returns sessionId', async () => {
+    const r = await request(app).post('/api/intent/sessions').set('Cookie', cookie).send({});
+    expect(r.status).toBe(201);
+    expect(r.body.sessionId).toBeDefined();
+    expect(r.body.sessionId.length).toBe(26);
+    expect(r.body.userId).toBeDefined();
   });
 
-  it('change password revokes all sessions and issues a new one', async () => {
-    const loginA = await request(app).post('/api/auth/login').send({ email: 'e2e@example.com', password: 'E2e-Secret-Passcode-!!' });
-    const cookieA = loginA.headers['set-cookie'];
-    const loginB = await request(app).post('/api/auth/login').send({ email: 'e2e@example.com', password: 'E2e-Secret-Passcode-!!' });
-    const cookieB = loginB.headers['set-cookie'];
+  it('sends message and returns LLM response (clarifying or triggered)', async () => {
+    const create = await request(app).post('/api/intent/sessions').set('Cookie', cookie).send({});
+    expect(create.status).toBe(201);
+    const sessionId = create.body.sessionId;
 
-    const change = await request(app).post('/api/me/password')
-      .set('Cookie', cookieA)
-      .send({ oldPassword: 'E2e-Secret-Passcode-!!', newPassword: 'New-Strong-Passcode-!!' });
-    expect(change.status).toBe(204);
-    const cookieAnew = change.headers['set-cookie'];
-
-    const oldA = await request(app).get('/api/me').set('Cookie', cookieA);
-    expect(oldA.status).toBe(401);
-    const oldB = await request(app).get('/api/me').set('Cookie', cookieB);
-    expect(oldB.status).toBe(401);
-    const newA = await request(app).get('/api/me').set('Cookie', cookieAnew);
-    expect(newA.status).toBe(200);
+    const r = await request(app)
+      .post(`/api/intent/sessions/${sessionId}/messages`)
+      .set('Cookie', cookie)
+      .send({ message: '我要做一个记账 app' });
+    expect(r.status).toBe(200);
+    expect(r.body.message).toBeDefined();
+    expect(r.body.status).toBeOneOf(['clarifying', 'triggered']);
   });
 
-  it('revoke someone else session returns 404', async () => {
-    const login = await request(app).post('/api/auth/login').send({ email: 'e2e@example.com', password: 'New-Strong-Passcode-!!' });
-    const cookie = login.headers['set-cookie'];
-    const res = await request(app).delete('/api/me/sessions/01HXAAAAAAAAAAAAAAAAAAAAAA').set('Cookie', cookie);
-    expect(res.status).toBe(404);
-  });
+  it('rejects empty message with 400', async () => {
+    const create = await request(app).post('/api/intent/sessions').set('Cookie', cookie).send({});
+    expect(create.status).toBe(201);
+    const sessionId = create.body.sessionId;
 
-  it('register endpoint returns 501 NOT_IMPLEMENTED in M0', async () => {
-    const res = await request(app).post('/api/auth/register').send({ email: 'a@b.com', password: 'xxx', displayName: 'x' });
-    expect(res.status).toBe(501);
-    expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
+    const r = await request(app)
+      .post(`/api/intent/sessions/${sessionId}/messages`)
+      .set('Cookie', cookie)
+      .send({ message: '' });
+    expect(r.status).toBe(400);
+    expect(r.body.error.code).toBe('VALIDATION_FAILED');
   });
 });
