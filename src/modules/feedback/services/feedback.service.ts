@@ -3,6 +3,7 @@ import type { FeedbackRepository } from '../repositories/feedback.repository';
 import type { ArtifactRepository } from '../../artifact/repositories/artifact.repository';
 import type { HistoricalFeedback, FeedbackLabel } from '../domain/feedback';
 import { FeedbackNotFoundError, FeedbackForbiddenError } from '../domain/errors';
+import { ITERATE_KEYWORDS } from '../../intent/services/intent-session.service';
 
 export class FeedbackService {
   constructor(
@@ -46,8 +47,6 @@ export class FeedbackService {
 
   async matchByIntent(userId: string, description: string, limit = 5): Promise<HistoricalFeedback[]> {
     // 关键词提取：剥离 ITERATE_KEYWORDS 后取前 10 字符
-    // 注意：ITERATE_KEYWORDS 从 IntentSessionService 导入（Task 9 创建）
-    const { ITERATE_KEYWORDS } = require('../../intent/services/intent-session.service');
     let stripped = description;
     for (const kw of ITERATE_KEYWORDS) {
       stripped = stripped.replace(new RegExp(kw, 'gi'), '');

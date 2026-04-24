@@ -77,7 +77,7 @@ export async function buildApp() {
 // S3.1 intent capture
   const llmClient = new NativeLlmClient(cfg.llm.apiKey, cfg.llm.model);
   const forgeService = new ForgeService(llmClient, artifactService, memoryService);
-  const intentService = new IntentSessionService(memoryService, llmClient, forgeService);
+  const intentService = new IntentSessionService(memoryService, llmClient, forgeService, feedbackService);
   const intentCtrl = new IntentController(intentService);
 
   const authCtrl = new AuthController(auth, cfg.session.cookieName, cfg.session.maxAgeDays, isProd);
