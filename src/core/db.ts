@@ -71,6 +71,15 @@ export type ArtifactRow = {
   visibility: 'private' | 'public';
 };
 
+export type FeedbackRow = {
+  id: string;
+  artifact_id: string;
+  user_id: string;
+  label: string;
+  comment: string | null;
+  created_at: Date;
+};
+
 export type Database = {
   users: UserRow;
   identities: IdentityRow;
@@ -79,6 +88,7 @@ export type Database = {
   conversations: ConversationRow;
   messages: MessageRow;
   artifacts: ArtifactRow;
+  feedbacks: FeedbackRow;
 };
 
 export function createDb(databaseUrl: string): { db: Kysely<Database>; pool: Pool } {
