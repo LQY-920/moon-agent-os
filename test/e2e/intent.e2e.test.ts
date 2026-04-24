@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import { MySqlContainer, type StartedMySqlContainer } from '@testcontainers/mysql';
 import { Kysely, MysqlDialect, Migrator, FileMigrationProvider } from 'kysely';
@@ -8,6 +8,33 @@ import * as nodePath from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { Express } from 'express';
 import type { Database } from '../../src/core/db';
+
+// Mock NativeLlmClient to return deterministic, well-formed responses.
+// This isolates e2e from real LLM quality/format instability, so e2e
+// only validates the pipeline wiring. Real-LLM format issues belong
+// in smoke tests, not e2e.
+vi.mock('../../src/modules/llm/native', () => ({
+  NativeLlmClient: class {
+    async complete(messages: Array<{ role: string; content: string }>) {
+      const last = messages[messages.length - 1]?.content ?? '';
+      // Intent prompt path: return a clarifying reply (no __EXECUTE__).
+      // Any message containing "记账" would otherwise trigger forge;
+      // we return clarifying to keep the e2e "clarifying or triggered"
+      // assertion deterministic and avoid hitting forge.
+      if (last.includes('记账')) {
+        return { content: '请问记账的频率是每天还是每周?' };
+      }
+      // Forge prompt path (not reached in current e2e, but safe default):
+      // return valid JSON for web artifact payload.
+      return {
+        content: JSON.stringify({
+          entryHtml: '<html><body>mock</body></html>',
+          assets: {},
+        }),
+      };
+    }
+  },
+}));
 
 let container: StartedMySqlContainer;
 let app: Express;
@@ -101,7 +128,7 @@ describe('Intent API', () => {
     expect(r.body.userId).toBeDefined();
   });
 
-  it('sends message and returns response (clarifying or triggered)', async () => {
+  it('sends message and returns LLM response (clarifying or triggered)', async () => {
     const create = await request(app).post('/api/intent/sessions').set('Cookie', cookie).send({});
     expect(create.status).toBe(201);
     const sessionId = create.body.sessionId;
@@ -110,13 +137,9 @@ describe('Intent API', () => {
       .post(`/api/intent/sessions/${sessionId}/messages`)
       .set('Cookie', cookie)
       .send({ message: '我要做一个记账 app' });
-    // Accept clarifying (200), triggered (200), or forge error (500)
-    // Note: triggered status depends on LLM response quality
-    expect([200, 500]).toContain(r.status);
-    if (r.status === 200) {
-      expect(r.body.message).toBeDefined();
-      expect(r.body.status).toBeOneOf(['clarifying', 'triggered']);
-    }
+    expect(r.status).toBe(200);
+    expect(r.body.message).toBeDefined();
+    expect(r.body.status).toBeOneOf(['clarifying', 'triggered']);
   });
 
   it('rejects empty message with 400', async () => {
