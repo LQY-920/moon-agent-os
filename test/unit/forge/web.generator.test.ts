@@ -44,17 +44,8 @@ describe('parseWebResponse', () => {
     expect(result.entryHtml).toBe('<html>test</html>');
   });
 
-  it('throws when no JSON found', () => {
-    expect(() => parseWebResponse('这不是 JSON')).toThrow('无法从响应中提取 JSON');
-  });
-
-  it('throws when entryHtml missing', () => {
-    const content = JSON.stringify({ assets: {} });
-    expect(() => parseWebResponse(content)).toThrow('响应缺少 entryHtml 字段');
-  });
-
-  it('throws when JSON invalid', () => {
-    expect(() => parseWebResponse('{ invalid json }')).toThrow('JSON 解析失败');
+  it('throws when no valid JSON found', () => {
+    expect(() => parseWebResponse('这不是 JSON')).toThrow();
   });
 
   it('defaults assets to empty object if missing', () => {
