@@ -19,31 +19,38 @@ export function createVisibilityMiddleware(
 ) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const artifactId = (req.params as Record<string, string>).artifactId;
-    if (!artifactId) return next();
+    if (!artifactId) {
+      next();
+      return;
+    }
 
     let artifact;
     try {
       artifact = await artifactService.getForRuntime(artifactId);
     } catch (e) {
       if (e instanceof ArtifactNotFoundError) {
-        return res.status(404).send(renderErrorPage('404 - 页面不存在', '您访问的页面不存在或已被删除'));
+        res.status(404).send(renderErrorPage('404 - 页面不存在', '您访问的页面不存在或已被删除'));
+        return;
       }
       throw e;
     }
 
     if (artifact.visibility === 'public') {
       req.context = { ...req.context, artifact };
-      return next();
+      next();
+      return;
     }
 
     // 私密 artifact：必须登录且为 owner
     const userId = await sessionService.getUserId(req);
     if (!userId) {
-      return res.redirect('/login');
+      res.redirect('/login');
+      return;
     }
 
     if (artifact.userId !== userId) {
-      return res.status(404).send(renderErrorPage('404 - 页面不存在', '您访问的页面不存在或已被删除'));
+      res.status(404).send(renderErrorPage('404 - 页面不存在', '您访问的页面不存在或已被删除'));
+      return;
     }
 
     req.context = { ...req.context, artifact };

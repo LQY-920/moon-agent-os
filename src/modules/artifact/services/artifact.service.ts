@@ -81,7 +81,9 @@ export class ArtifactService {
     if (artifact.userId !== userId) throw new ArtifactForbiddenError();
 
     await this.artifacts.updateVisibility(artifactId, visibility);
-    return this.artifacts.findById(artifactId);
+    const updated = await this.artifacts.findById(artifactId);
+    if (!updated) throw new ArtifactNotFoundError();
+    return updated;
   }
 
   async getForRuntime(artifactId: string): Promise<Artifact> {

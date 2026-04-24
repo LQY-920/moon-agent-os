@@ -6,6 +6,10 @@ import type { SessionService } from '../../../src/modules/identity/services/sess
 import { ArtifactNotFoundError } from '../../../src/modules/artifact/domain/errors';
 
 describe('createVisibilityMiddleware', () => {
+  function createMiddleware(artifactService: ArtifactService, sessionService: SessionService) {
+    return createVisibilityMiddleware(artifactService, sessionService);
+  }
+
   let middleware: (req: Request, res: Response, next: NextFunction) => Promise<void>;
   let mockArtifactService: ArtifactService;
   let mockSessionService: SessionService;
@@ -21,7 +25,7 @@ describe('createVisibilityMiddleware', () => {
       getUserId: vi.fn(),
     } as unknown as SessionService;
 
-    middleware = createVisibilityMiddleware(mockArtifactService, mockSessionService);
+    middleware = createMiddleware(mockArtifactService, mockSessionService);
 
     req = { params: { artifactId: 'artifact-123' }, context: {} } as unknown as Request;
     res = {
@@ -89,7 +93,7 @@ describe('createVisibilityMiddleware', () => {
 
   it('returns 404 when artifact not found', async () => {
     mockArtifactService.getForRuntime = vi.fn().mockRejectedValue(
-      new ArtifactNotFoundError('artifact-123'),
+      new ArtifactNotFoundError(),
     );
 
     await middleware(req, res, next);

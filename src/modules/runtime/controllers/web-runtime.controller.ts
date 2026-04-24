@@ -1,10 +1,7 @@
 import type { Request, Response } from 'express';
-import type { ArtifactService } from '../../artifact/services/artifact.service';
 import type { Artifact } from '../../artifact/domain/artifact';
 
 export class WebRuntimeController {
-  constructor(private readonly artifactService: ArtifactService) {}
-
   async renderApp(req: Request, res: Response) {
     const artifact = req.context?.artifact as Artifact | undefined;
     if (!artifact) {

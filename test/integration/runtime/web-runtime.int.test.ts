@@ -7,7 +7,6 @@ import type { Express } from 'express';
 import { startTestDb } from '../setup';
 import type { Kysely } from 'kysely';
 import type { Database } from '../../../src/core/db';
-import { buildApp } from '../../../src/main';
 import { PasswordService } from '../../../src/modules/identity/services/password.service';
 
 let app: Express;
@@ -65,17 +64,17 @@ beforeAll(async () => {
     email: `runtime-test-${userId}@example.com`,
     password: 'testpassword',
   });
-  const cookies = login.headers['set-cookie'] as string[] | undefined;
-  cookie = cookies ? cookies[0] : '';
+  const rawCookies = login.headers['set-cookie'];
+  cookie = Array.isArray(rawCookies) ? rawCookies[0] : (typeof rawCookies === 'string' ? rawCookies : '');
 }, 120_000);
 
 afterAll(async () => {
-  if (app && db) {
+  if (Boolean(app) && Boolean(db)) {
     await db.deleteFrom('artifacts').where('user_id', '=', userId).execute();
     await db.deleteFrom('sessions').where('user_id', '=', userId).execute();
     await db.deleteFrom('users').where('id', '=', userId).execute();
   }
-  if (cleanup) await cleanup();
+  await cleanup();
 }, 60_000);
 
 beforeEach(async () => {

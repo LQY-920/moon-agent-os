@@ -1,16 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WebRuntimeController } from '../../../src/modules/runtime/controllers/web-runtime.controller';
-import type { ArtifactService } from '../../../src/modules/artifact/services/artifact.service';
 
 describe('WebRuntimeController', () => {
   let controller: WebRuntimeController;
-  let mockArtifactService: ArtifactService;
   let req: any;
   let res: any;
 
   beforeEach(() => {
-    mockArtifactService = {} as ArtifactService;
-    controller = new WebRuntimeController(mockArtifactService);
+    controller = new WebRuntimeController();
 
     req = { context: {} };
     res = {
