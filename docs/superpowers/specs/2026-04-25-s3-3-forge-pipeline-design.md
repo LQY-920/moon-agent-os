@@ -300,7 +300,7 @@ const forge = new ForgeService(
 | LLM API 超时/失败 | 抛 `ForgeGenerationError`，S3.1 返回 500 |
 | LLM 响应格式错误 | 抛 `ForgeGenerationError` |
 | Artifact 创建失败 | 抛 `InvalidPayloadError`（S3.2），向上透传 |
-| 写记忆失败 | 抛 `MemoryWriteError`（S2.1），向上透传 |
+| 写记忆失败 | 透传 S2.1 的错误（`ConversationNotFoundError` / `ConversationForbiddenError` 或 DB 错误），向上传播 |
 
 **S3.1 错误传播**:所有错误透传到 `IntentController`，由 `errorHandler` 统一处理。
 
